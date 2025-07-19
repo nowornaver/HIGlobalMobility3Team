@@ -1,0 +1,46 @@
+	; Module start
+	.compiler_version	"TASKING VX-toolset for AURIX Development Studio (non-commercial): C compiler v1.1r8 Build 22011964"
+	.compiler_invocation	"ctc -f cc29156a --dep-file=Libraries/iLLD/TC27D/Tricore/_Impl/IfxScu_cfg.d -c99 --fp-model=3cflnrSTz -D__CPU__=tc27xd -D__CPU_TC27XD__ --core=tc1.6.x --fp-model=+float -D__CPU__=tc27xd -IC:\\\\KK\\\\hi -IC:\\\\KK\\\\hi\\\\Configurations -IC:\\\\KK\\\\hi\\\\Libraries -IC:\\\\KK\\\\hi\\\\Libraries\\\\Infra -IC:\\\\KK\\\\hi\\\\Libraries\\\\Infra\\\\Platform -IC:\\\\KK\\\\hi\\\\Libraries\\\\Infra\\\\Platform\\\\Tricore -IC:\\\\KK\\\\hi\\\\Libraries\\\\Infra\\\\Platform\\\\Tricore\\\\Compilers -IC:\\\\KK\\\\hi\\\\Libraries\\\\Infra\\\\Sfr -IC:\\\\KK\\\\hi\\\\Libraries\\\\Infra\\\\Sfr\\\\TC27D -IC:\\\\KK\\\\hi\\\\Libraries\\\\Infra\\\\Sfr\\\\TC27D\\\\_Reg -IC:\\\\KK\\\\hi\\\\Libraries\\\\Service -IC:\\\\KK\\\\hi\\\\Libraries\\\\Service\\\\CpuGeneric -IC:\\\\KK\\\\hi\\\\Libraries\\\\Service\\\\CpuGeneric\\\\StdIf -IC:\\\\KK\\\\hi\\\\Libraries\\\\Service\\\\CpuGeneric\\\\_Utilities -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Asclin -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Asclin\\\\Asc -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Asclin\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Cpu -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Cpu\\\\CStart -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Cpu\\\\Irq -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Cpu\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Cpu\\\\Trap -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Gtm -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Gtm\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Gtm\\\\Tom -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Gtm\\\\Tom\\\\PwmHl -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Gtm\\\\Tom\\\\Timer -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Mtu -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Mtu\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Port -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Port\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Scu -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Scu\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Src -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Src\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Stm -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Stm\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Vadc -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Vadc\\\\Adc -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\Vadc\\\\Std -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\_Impl -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\_Lib -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\_Lib\\\\DataHandling -IC:\\\\KK\\\\hi\\\\Libraries\\\\iLLD\\\\TC27D\\\\Tricore\\\\_PinMap -g2 -w544 -w557 -t4 --language=+volatile -N0 -O0 -Y0 -Z0 --compact-max-size=200 --misrac-version=2004 -o Libraries/iLLD/TC27D/Tricore/_Impl/IfxScu_cfg.src ../Libraries/iLLD/TC27D/Tricore/_Impl/IfxScu_cfg.c"
+	.compiler_name		"ctc"
+	;source	'../Libraries/iLLD/TC27D/Tricore/_Impl/IfxScu_cfg.c'
+
+	
+$TC16X
+	
+	.sdecl	'.debug_info',debug
+	.sect	'.debug_info'
+.L3:
+	.word	184
+	.half	3
+	.word	.L4
+	.byte	4
+.L2:
+	.byte	1
+	.byte	'../Libraries/iLLD/TC27D/Tricore/_Impl/IfxScu_cfg.c',0
+	.byte	'TASKING VX-toolset for AURIX Development Studio (non-commercial): C compiler',0
+	.byte	'C:\\KK\\hi\\Debug\\',0,12,1
+	.word	.L5
+	.byte	2,1,3
+	.word	162
+	.byte	4
+	.byte	'__codeptr',0,1,1,1
+	.word	164
+	.byte	0
+	.sdecl	'.debug_abbrev',debug
+	.sect	'.debug_abbrev'
+.L4:
+	.byte	1,17,1,3,8,37,8,27,8,19,15,128,70,12,16,6,0,0,2,21,0,54,15,0,0,3,15,0,73,19,0,0,4,22,0,3,8,58,15,59,15
+	.byte	57,15,73,19,0,0,0
+	.sdecl	'.debug_line',debug
+	.sect	'.debug_line'
+.L5:
+	.word	.L7-.L6
+.L6:
+	.half	3
+	.word	.L9-.L8
+.L8:
+	.byte	2,1,-4,9,10,0,1,1,1,1,0,0,0,1,0
+	.byte	'../Libraries/iLLD/TC27D/Tricore/_Impl/IfxScu_cfg.c',0,0,0,0,0
+.L9:
+.L7:
+	; Module end
