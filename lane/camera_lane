@@ -1,0 +1,149 @@
+import cv2
+import numpy as np
+import depthai as dai
+
+NUM_WINDOWS = 30
+MAX_SHIFT = 5
+MARGIN = 55
+MINPIX = 10
+FRAME_DELAY = 50  # ms
+
+def fit_poly(pts, degree=2):
+    if len(pts) < degree + 1:
+        return np.zeros(degree + 1)
+    pts = np.array(pts)
+    x = pts[:, 0]
+    y = pts[:, 1]
+    return np.polyfit(y, x, degree)
+
+def get_histogram_peaks(mask, seg=50):
+    h, w = mask.shape
+    lower_half = mask[h//2:, :]
+    upper_half = mask[:h//2, :]
+    hist_low = np.sum(lower_half, axis=0)
+    hist_up = np.sum(upper_half, axis=0)
+    hist = hist_low + 0.5 * hist_up
+    seg_sum = [np.sum(hist[i:i + seg]) for i in range(0, w, seg)]
+    mid = w // 2
+    bestL = np.argmax(seg_sum[:mid // seg])
+    bestR = np.argmax(seg_sum[mid // seg:]) + mid // seg
+    init_xL = (bestL * seg + min(mid, (bestL + 1) * seg)) // 2
+    init_xR = (bestR * seg + min(w, (bestR + 1) * seg)) // 2
+    return init_xL, init_xR
+
+def oakd_capture(res=(1280, 720)):
+    pipeline = dai.Pipeline()
+    cam_rgb = pipeline.createColorCamera()
+    cam_rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
+    cam_rgb.setPreviewSize(res[0], res[1])
+    cam_rgb.setInterleaved(False)
+    xout = pipeline.createXLinkOut()
+    xout.setStreamName("rgb")
+    cam_rgb.preview.link(xout.input)
+    device = dai.Device(pipeline)
+    q = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
+    while True:
+        frame = q.get().getCvFrame()
+        yield frame
+
+def main():
+    # BEV 좌표(네 환경 맞게 조정 가능)
+    src_pts = np.float32([[330,700],[1000,700],[800,600],[520,600]])
+    prev_left_x, prev_right_x = -1, -1
+    prev_fit_L, prev_fit_R = np.zeros(3), np.zeros(3)
+    alpha = 0.875
+    cap_gen = oakd_capture()
+    frame_count = 0
+
+    for frame in cap_gen:
+        H, W = frame.shape[:2]
+        dst_pts = np.float32([[0, H], [W, H], [W, 0], [0, 0]])
+        M = cv2.getPerspectiveTransform(src_pts, dst_pts)
+        bird = cv2.warpPerspective(frame, M, (W, H))
+
+        # ---- Grayscale + CLAHE + Adaptive
+        gray = cv2.cvtColor(bird, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray_clahe = clahe.apply(gray)
+        adaptive = cv2.adaptiveThreshold(
+            gray_clahe, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 25, 10)
+
+        # ---- HSV 차선 마스크 (완화)
+        hsv = cv2.cvtColor(bird, cv2.COLOR_BGR2HSV)
+        mask_w = cv2.inRange(hsv, (0, 0, 170), (180, 80, 255))
+        mask_y = cv2.inRange(hsv, (10, 60, 70), (40, 255, 255))
+        mask_hsv = cv2.bitwise_or(mask_w, mask_y)
+
+        # ---- 최종 마스크
+        mask = cv2.bitwise_or(mask_hsv, adaptive)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+
+        if frame_count % 10 == 0:
+            cv2.imshow("Binary Mask (HSV+Adaptive)", mask)
+            cv2.imshow("HSV Mask Only", mask_hsv)
+
+        init_xL, init_xR = get_histogram_peaks(mask)
+        if prev_left_x >= 0:
+            dL = init_xL - prev_left_x
+            if abs(dL) > MAX_SHIFT:
+                init_xL = prev_left_x + (MAX_SHIFT if dL > 0 else -MAX_SHIFT)
+            dR = init_xR - prev_right_x
+            if abs(dR) > MAX_SHIFT:
+                init_xR = prev_right_x + (MAX_SHIFT if dR > 0 else -MAX_SHIFT)
+
+        prev_left_x, prev_right_x = init_xL, init_xR
+        h, w = mask.shape
+        win_h = h // NUM_WINDOWS
+        left_x, right_x = init_xL, init_xR
+        left_pts, right_pts = [], []
+
+        for i in range(NUM_WINDOWS):
+            y_low = h - (i + 1) * win_h
+            y_high = h - i * win_h
+            xl_lo, xl_hi = max(0, left_x - MARGIN), min(w, left_x + MARGIN)
+            xr_lo, xr_hi = max(0, right_x - MARGIN), min(w, right_x + MARGIN)
+            nzl, nzr = [], []
+            for y in range(y_low, y_high):
+                row = mask[y]
+                nzl += [(x, y) for x in range(xl_lo, xl_hi) if row[x]]
+                nzr += [(x, y) for x in range(xr_lo, xr_hi) if row[x]]
+            if len(nzl) > MINPIX:
+                left_x = int(np.mean([x for x, _ in nzl]))
+            if len(nzr) > MINPIX:
+                right_x = int(np.mean([x for x, _ in nzr]))
+            left_pts.append((left_x, (y_low + y_high) // 2))
+            right_pts.append((right_x, (y_low + y_high) // 2))
+
+        if len(right_pts) < 20 and len(left_pts) > 100:
+            mid = w // 2
+            right_pts += [(2 * mid - x, y) for x, y in left_pts if 0 < 2 * mid - x < w]
+
+        left_fit = prev_fit_L if len(left_pts) < 8 else (
+            alpha * prev_fit_L + (1 - alpha) * fit_poly(left_pts))
+        right_fit = prev_fit_R if len(right_pts) < 8 else (
+            alpha * prev_fit_R + (1 - alpha) * fit_poly(right_pts))
+
+        prev_fit_L, prev_fit_R = left_fit, right_fit
+
+        vis = bird.copy()
+        # (점선: 초록-왼쪽, 노랑-오른쪽)
+        for y in range(0, h, 10):
+            lx = int(np.polyval(left_fit, y))
+            rx = int(np.polyval(right_fit, y))
+            if 0 <= lx < w:
+                cv2.circle(vis, (lx, y), 2, (0, 255, 0), -1)
+            if 0 <= rx < w:
+                cv2.circle(vis, (rx, y), 2, (0, 255, 255), -1)
+
+        # 3개 창 동시 출력
+        cv2.imshow("OAK-D Camera (original)", frame)
+        cv2.imshow("BEV + Lane Detection", vis)
+
+        if cv2.waitKey(FRAME_DELAY) & 0xFF == ord('q'):
+            break
+        frame_count += 1
+
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
