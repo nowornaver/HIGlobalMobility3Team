@@ -62,7 +62,7 @@ stereo.depth.link(xout_depth.input)
 with dai.Device(pipeline) as device:
     q_rgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
     q_depth = device.getOutputQueue(name="depth", maxSize=4, blocking=False)
-    print("OAK-D Pro 신호등/사람/차량 인식 (COCO+내모델, HSV 이중색상판별)")
+    print("OAK-D Pro 신호등/사람/차량 인식")
 
     while True:
         in_rgb = q_rgb.get()
