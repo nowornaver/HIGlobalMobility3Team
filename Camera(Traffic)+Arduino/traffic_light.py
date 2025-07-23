@@ -100,7 +100,6 @@ with dai.Device(pipeline) as device:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                 cv2.circle(frame, (cx, cy), 5, color, -1)
 
-<<<<<<< HEAD
                 # 신호등 색상 메시지 + STOP/GO 신호
                 if status == "traffic_red":
                     print("COCO: 신호등 빨간색입니다.\nSTOP 신호 (빨간불) - 차가 멈춰야 합니다.")
@@ -110,21 +109,6 @@ with dai.Device(pipeline) as device:
                     stop_signal = True
                 elif status == "traffic_green":
                     print("COCO: 신호등 초록입니다.\nGO 신호 (초록불) - 차가 진행할 수 있습니다.")
-=======
-                # --- 신호등 색상 메시지 + STOP/GO 신호 ---
-                if status == "traffic_red":
-                    print("신호등 빨간색입니다.")
-                    print("STOP 신호 (빨간불) - 차가 멈춰야 합니다.")
-                    stop_signal = True
-                elif status == "traffic_yellow":
-                    print("신호등 노란색입니다.")
-                    print("STOP 신호 (노란불) - 차가 멈춰야 합니다.")
-                    stop_signal = True
-                elif status == "traffic_green":
-                    print("신호등 초록입니다.")
-                    print("GO 신호 (초록불) - 차가 진행할 수 있습니다.")
->>>>>>> d1ef9fb134cc074c961b53dad8e10c6a4ff546b4
-                    stop_signal = False
 
             # 사람
             elif cls == COCO_PERSON_ID:
@@ -135,7 +119,6 @@ with dai.Device(pipeline) as device:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                 cv2.circle(frame, (cx, cy), 5, color, -1)
 
-<<<<<<< HEAD
             # 차량 (자동차, 오토바이, 버스, 트럭)
             elif cls in COCO_CAR_IDS:
                 color = (255, 0, 0)  # 파랑 계열 (자동차)
@@ -177,10 +160,6 @@ with dai.Device(pipeline) as device:
                     print("MY: 신호등 노란색입니다.\nSTOP 신호 (노란불) - 차가 멈춰야 합니다.")
                 elif status == "traffic_green":
                     print("MY: 신호등 초록입니다.\nGO 신호 (초록불) - 차가 진행할 수 있습니다.")
-=======
-        # --- stop_signal을 활용해서 이후 코드 추가 가능 ---
-        # 예: if stop_signal: 모터/로봇 정지, else: 진행
->>>>>>> d1ef9fb134cc074c961b53dad8e10c6a4ff546b4
 
         cv2.imshow("OAK-D Pro 신호등/사람/차량 인식", frame)
         key = cv2.waitKey(1) & 0xFF
