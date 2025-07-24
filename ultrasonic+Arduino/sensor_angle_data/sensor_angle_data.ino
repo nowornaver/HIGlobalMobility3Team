@@ -66,6 +66,8 @@ float readUltrasonic(int trigPin, int echoPin) {
 void loop() {
   if (flag100ms) {
   float front = readUltrasonic(TRIG_FRONT, ECHO_FRONT);
+  delay(20); // 간섭 방지
+
   float rear  = readUltrasonic(TRIG_REAR,  ECHO_REAR);
 
   unsigned long currentTime = millis() - startTime;
