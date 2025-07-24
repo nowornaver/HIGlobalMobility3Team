@@ -2,12 +2,12 @@ from ultralytics import YOLO
 import depthai as dai
 import cv2
 import numpy as np
-# import serial  # ← 일단 주석 처리
+# import serial
 
 # # 시리얼(아두이노) 설정
 # SERIAL_PORT = 'COM3'  # 실제 연결된 포트로 바꿔야 함!
 # SERIAL_BAUD = 9600
-# ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)  # ← 주석 처리
+# ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 
 # --- 모델 불러오기 ---
 coco_model = YOLO('yolov8m.pt')
