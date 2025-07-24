@@ -1,5 +1,12 @@
 #include <MsTimer2.h>
 
+#define TRIG_FRONT 11
+#define ECHO_FRONT 12
+
+#define TRIG_REAR 31
+#define ECHO_REAR 30
+
+
 // 속도
 #define SPEED_MOTOR_FRONT_PWM  5
 #define SPEED_MOTOR_FRONT_DIR  6
@@ -18,7 +25,6 @@
 double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 
 int toggle_count = 0;
-
 const int ENCODER_COUNTS_PER_REV = 300;//
 const double WHEEL_RADIUS = 0.135;
 const double MY_PI = 3.14159265358979323846;
@@ -207,6 +213,8 @@ void Interrupt_10ms() {
 void setup() {
   Serial.begin(115200);
 
+  startTime = millis();
+
   pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_BRK, OUTPUT);
@@ -215,6 +223,13 @@ void setup() {
   pinMode(STEERING_MOTOR_DIR_PIN, OUTPUT);
   pinMode(STEERING_MOTOR_BRK_PIN, OUTPUT);
   pinMode(STEERING_ANALOG_PIN, INPUT);
+
+  pinMode(TRIG_FRONT, OUTPUT);
+  pinMode(ECHO_FRONT, INPUT);
+
+  pinMode(TRIG_REAR, OUTPUT);
+  pinMode(ECHO_REAR, INPUT);
+
 
   initEncoders();
   clearEncoderCount();
@@ -227,6 +242,29 @@ void loop() {
   setMotor(totalOutput, motor_pwmValue);
   controlSteeringMotor(currentAngle, targetAngle);
 
+long duration;
+  float distance;
+
+  // 초음파 신호 받기(RX)
+  digitalWrite(TRIG_FRONT, HIGH);
+  delayMicroseconds(30);
+  digitalWrite(TRIG_FRONT, LOW);
+
+  digitalWrite(TRIG_REAR, HIGH);
+  delayMicroseconds(30);
+  digitalWrite(TRIG_REAR, LOW);
+  // 신호 보내기(TX)
+  duration = pulseIn(ECHO_FRONT, HIGH);
+  distance = duration * 0.0343 / 2;  // cm 단위
+  
+   duration = pulseIn(ECHO_REAR, HIGH);
+  distance = duration * 0.0343 / 2;  // cm 단위
+
+  // 시리얼 모니터 출력
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
   desiredSpeed_mps = desiredSpeed_kph / 3.6;
   target_RPM = (desiredSpeed_mps * 60.0) / (2 * MY_PI * WHEEL_RADIUS);
   Current_RPM = calculateSpeedRPM();
@@ -238,7 +276,7 @@ if (Serial.available() > 0) {
   String input = Serial.readStringUntil('\n');
   input.trim();  // 공백 제거
 
-  if (input.equalsIgnoreCase("STOP")) {
+  if (input.equalsIgnoreCase("STOPPED")) {
     speed_angle_queue[0][0] = 0.0; // 속도 = 0
     target_RPM=0;
     // 조향각은 유지
