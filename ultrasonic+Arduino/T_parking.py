@@ -15,7 +15,7 @@ STOP_COUNT_REQUIRED = 5  # 몇 번 이상 감지되어야 정지할지 설정
 state = "REVERSING"
 steer_reset_start_time = None
 below_threshold_count = 0
-
+Steer_angle = 0
 def get_distance():
     line = serial_port.readline().decode('utf-8').strip()
     if line:
@@ -55,8 +55,11 @@ def main():
         elif state == "STEER_RESET":
             print("↔️ 조향각 리셋 중...")
             elapsed = time.time() - steer_reset_start_time
+
             if elapsed >= 1.0:
                 print("✅ 조향 리셋 완료 → 전진 시작")
+                Steer_angle = input("조향각 입력 (예: 0.0): ")
+                serial_port1.write((steer_angle + "\n").encode('utf-8'))
                 state = "FORWARD"
                 steer_reset_start_time = None
 
@@ -65,6 +68,8 @@ def main():
             if distance >= RECOVERY_DISTANCE:
                 print("🔁 공간 확보됨 → 다시 후진 시작")
                 state = "REVERSING"
+
+        
         serial_port1.write((state + "\n").encode('utf-8'))  # ★ 상태 전송
 
         time.sleep(0.1)
