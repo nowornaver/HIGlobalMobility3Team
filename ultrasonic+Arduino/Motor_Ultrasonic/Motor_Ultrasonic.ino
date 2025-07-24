@@ -204,11 +204,15 @@ void loop() {
     if (Serial.available() > 0) {
     receivedState = Serial.readStringUntil('\n');
     receivedState.trim();
+            while (Serial.available() > 0) Serial.read();
+
     }
     if (Serial.available() > 0) {
       receivedAngleStr = Serial.readStringUntil('\n');
       receivedAngleStr.trim();
       receivedAngle = receivedAngleStr.toFloat();
+              while (Serial.available() > 0) Serial.read();
+
     }
 
 
@@ -218,18 +222,21 @@ void loop() {
       speed_angle_queue[0][1] = 0.0;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
+
     }
     else if (receivedState == "STEER_RESET") {
       speed_angle_queue[0][0] = 0.0;  
       speed_angle_queue[0][1] = receivedAngle;   
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
+
     }
     else if (receivedState == "FORWARD") {
       speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
       speed_angle_queue[0][1] = 0.0;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
+
     }
     else {
       // 알 수 없는 상태면 정지
@@ -237,6 +244,7 @@ void loop() {
       speed_angle_queue[0][1] = 0.0;
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
+
     }
 
   // 초기 2초간 PID 동작 무시 (안정화 시간)
