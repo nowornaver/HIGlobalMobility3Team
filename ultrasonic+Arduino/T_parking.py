@@ -41,12 +41,14 @@ def main():
             if distance <= STOP_THRESHOLD:
                 below_threshold_count += 1
                 print(f"⚠️ 감지 카운트: {below_threshold_count}")
+                
             else:
                 below_threshold_count = 0  # 조건 벗어나면 리셋
 
             if below_threshold_count >= STOP_COUNT_REQUIRED:
                 print("🛑 차량 정지 (50cm 이하 거리 5회 감지)")
                 state = "STEER_RESET"
+                serial_port.write((state + "\n").encode('utf-8'))  # ★ 상태 전송
                 steer_reset_start_time = time.time()
                 below_threshold_count = 0  # 초기화
 
