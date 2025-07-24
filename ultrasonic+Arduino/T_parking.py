@@ -55,10 +55,10 @@ def main():
         elif state == "STEER_RESET":
             print("↔️ 조향각 리셋 중...")
             elapsed = time.time() - steer_reset_start_time
+            steer_angle = str(float(input("조향각 입력 (예: 0.0): ")))
 
             if elapsed >= 1.0:
                 print("✅ 조향 리셋 완료 → 전진 시작")
-                steer_angle = str(float(input("조향각 입력 (예: 0.0): ")))
                 state = "FORWARD"
                 steer_reset_start_time = None
 
