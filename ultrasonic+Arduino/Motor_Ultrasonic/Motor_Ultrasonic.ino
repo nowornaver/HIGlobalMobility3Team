@@ -220,8 +220,8 @@ void loop() {
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
     }
     else if (receivedState == "STEER_RESET") {
-      speed_angle_queue[0][0] = 1.0;   // 정지
-      speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
+      speed_angle_queue[0][0] = 0.0;  
+      speed_angle_queue[0][1] = receivedAngle;   
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
     }
