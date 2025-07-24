@@ -240,6 +240,7 @@ if (Serial.available() > 0) {
 
   if (input.equalsIgnoreCase("STOP")) {
     speed_angle_queue[0][0] = 0.0; // 속도 = 0
+    target_RPM=0;
     // 조향각은 유지
   } 
   else if (input.indexOf(',') != -1) {
@@ -261,12 +262,12 @@ if (Serial.available() > 0) {
   totalOutput = computePID(Current_RPM, target_RPM, Kp_speed, Ki_speed, Kd_speed);
   calculateSteeringControl(currentAngle, targetAngle);
   motor_pwmValue = calculateDutyCycle(totalOutput);
-    Serial.print("RPM_Target:"); Serial.print(target_RPM);
-    Serial.print(",RPM_Current:"); Serial.print(current_RPM);
-    Serial.print(",RPM_Out:"); Serial.print(output_speed);
-    Serial.print(",Steer_Target:"); Serial.print(target_angle);
-    Serial.print(",Steer_Current:"); Serial.print(current_angle);
-    Serial.print(",Steer_Out:"); Serial.println(output_steer);
+  Serial.print("RPM_Target:"); Serial.print(target_RPM);
+  Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
+  Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
+  // Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
+  // Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
+  // Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
   do { delay(1); } while (toggle_count <= 9);
   toggle_count = 0;
 }
