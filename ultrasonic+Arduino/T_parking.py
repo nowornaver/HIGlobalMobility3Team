@@ -58,8 +58,7 @@ def main():
 
             if elapsed >= 1.0:
                 print("✅ 조향 리셋 완료 → 전진 시작")
-                Steer_angle = input("조향각 입력 (예: 0.0): ")
-                serial_port1.write((steer_angle + "\n").encode('utf-8'))
+                steer_angle = str(float(input("조향각 입력 (예: 0.0): ")))
                 state = "FORWARD"
                 steer_reset_start_time = None
 
@@ -70,7 +69,8 @@ def main():
                 state = "REVERSING"
 
         
-        serial_port1.write((state + "\n").encode('utf-8'))  # ★ 상태 전송
+        cmd_str = f"{state},{angle}\n"
+        serial_port1.write(cmd_str.encode('utf-8'))
 
         time.sleep(0.1)
 
