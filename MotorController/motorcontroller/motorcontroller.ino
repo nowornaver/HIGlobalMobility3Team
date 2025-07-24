@@ -49,7 +49,7 @@ int readIndex = 0;
 // 조향 PID 변수 (Pot 기반)
 int currentPotValue = 0, targetPotValue = 0;
 double steering_pwmValue = 0.0;
-const double Kp_steering = 6.7, Ki_steering = 1.1, Kd_steering = 0.7;
+const double Kp_steering = 0.75, Ki_steering = 0.2, Kd_steering = 0.1;
 double integral_steering = 0.0, derivative_steering = 0.0;
 double previous_error_steering = 0.0;
 const double integralLimit = 50.0;
@@ -61,8 +61,8 @@ double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 int getPotFromAngle(double targetAngle) {
   const double angle0 = -17.0;
   const double angle1 = 22.0;
-  const int pot0 = 1023;
-  const int pot1 =238;
+  const int pot0 = 10;
+  const int pot1 = 1018;
   return pot0 + (targetAngle - angle0) * (float)(pot1 - pot0) / (angle1 - angle0);
 }
 
@@ -142,14 +142,17 @@ double computePID(double Current_RPM, double target_RPM, double kp, double ki, d
   filter += (deltaT / fe_a) * (error_RPM - filter);
   derivative = (filter - filter_old) / deltaT;
 
-  return kp * error_RPM + ki * integral_error_RPM + kd * derivative;
+  double output = kp * error_RPM + ki * integral_error_RPM + kd * derivative;
+  return constrain(output, -127, 127);  // 안정화
 }
 
 int calculateDutyCycle(double output) {
-  return constrain(output, -127, 127);
+  return constrain((int)output, -127, 127);
 }
 
 // --- Setup
+unsigned long startTime = 0;
+
 void setup() {
   Serial.begin(115200);
 
@@ -165,8 +168,12 @@ void setup() {
   initEncoders();
   clearEncoderCount();
 
+  previous_pos = readEncoder();  // ✅ 초기값 설정
+
   MsTimer2::set(10, Interrupt_10ms);
   MsTimer2::start();
+
+  startTime = millis();  // ✅ 초기 2초 무시
 }
 
 // --- Main Loop
@@ -184,7 +191,14 @@ void loop() {
     }
   }
 
-  // 동작 조건 처리
+  // 초기 2초간 PID 동작 무시 (안정화 시간)
+  if (millis() - startTime < 2000) {
+    setMotor(0, 0);
+    clearEncoderCount();
+    previous_pos = readEncoder();
+    return;
+  }
+
   desiredSpeed_kph = speed_angle_queue[0][0];
   double targetAngle = speed_angle_queue[0][1];
 
@@ -192,7 +206,6 @@ void loop() {
     setMotor(0, 0);  // 정지
     targetAngle = 1.0;
   } else {
-    // 속도 PID 제어
     desiredSpeed_mps = desiredSpeed_kph / 3.6;
     target_RPM = (desiredSpeed_mps * 60.0) / (2 * MY_PI * WHEEL_RADIUS);
     Current_RPM = calculateSpeedRPM();
@@ -201,12 +214,10 @@ void loop() {
     setMotor(totalOutput, motor_pwmValue);
   }
 
-  // 조향 Pot 값 기반 제어
   targetPotValue = getPotFromAngle(targetAngle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
 
-  // 디버깅 출력
   Serial.print("RPM_Target:"); Serial.print(target_RPM);
   Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
   Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
