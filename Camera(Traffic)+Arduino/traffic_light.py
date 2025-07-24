@@ -155,10 +155,10 @@ with dai.Device(pipeline) as device:
                         break
 
         # --- 실제 아두이노 연동 예시 ---
-        # if stop_signal:
-        #     ser.write(b'STOP\n')
-        # else:
-        #     ser.write(b'GO\n')
+        if stop_signal:
+            ser.write(b'STEER_RESET\n')
+        else:
+            ser.write(b'FORWARD\n')
 
         cv2.imshow("OAK-D Pro 신호등/사람/차량 인식", frame)
         key = cv2.waitKey(1) & 0xFF
