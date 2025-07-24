@@ -156,6 +156,8 @@ unsigned long startTime = 0;
 void setup() {
   Serial.begin(115200);
 
+  startTime = millis();
+
   pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_BRK, OUTPUT);
