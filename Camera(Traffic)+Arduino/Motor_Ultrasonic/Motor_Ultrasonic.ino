@@ -202,14 +202,14 @@ void loop() {
 
 
     if (Serial.available() > 0) {
-    receivedState = Serial.readStringUntil('\n');
-    receivedState.trim();
-
-    // 두 번째 줄 바로 받기
-    receivedAngleStr = Serial.readStringUntil('\n');
-    receivedAngleStr.trim();
-    receivedAngle = receivedAngleStr.toFloat();
-
+    String input = Serial.readStringUntil('\n'); //(state,angle)
+    input.trim();
+    int commaIndex = input.indexOf(',');
+    if (commaIndex != -1) {
+        String receivedState = input.substring(0, commaIndex);
+        float receivedAngle = input.substring(commaIndex + 1).toFloat();
+        // 받은 값 활용
+    }
     // 버퍼 깔끔하게 비우기 (혹시 남은 게 있다면)
     while (Serial.available() > 0) Serial.read();
 
