@@ -3,6 +3,7 @@ import time
 
 # 하나의 보드만 연결됨
 serial_port = serial.Serial('COM8', 9600, timeout=1)
+serial_port1 = serial.Serial('COM9',115200,timeout=1) #Vs code -> MotorController
 time.sleep(2)
 
 # 거리 기준 (cm)
@@ -48,7 +49,6 @@ def main():
             if below_threshold_count >= STOP_COUNT_REQUIRED:
                 print("🛑 차량 정지 (50cm 이하 거리 5회 감지)")
                 state = "STEER_RESET"
-                serial_port.write((state + "\n").encode('utf-8'))  # ★ 상태 전송
                 steer_reset_start_time = time.time()
                 below_threshold_count = 0  # 초기화
 
@@ -65,6 +65,7 @@ def main():
             if distance >= RECOVERY_DISTANCE:
                 print("🔁 공간 확보됨 → 다시 후진 시작")
                 state = "REVERSING"
+        serial_port1.write((state + "\n").encode('utf-8'))  # ★ 상태 전송
 
         time.sleep(0.1)
 

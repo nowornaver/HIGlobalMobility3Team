@@ -156,8 +156,6 @@ unsigned long startTime = 0;
 void setup() {
   Serial.begin(115200);
 
-  startTime = millis();
-
   pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_BRK, OUTPUT);
@@ -182,16 +180,6 @@ void setup() {
 void loop() {
   currentPotValue = analogRead(STEERING_ANALOG_PIN);
 
-  // 시리얼 명령 받기 (예: "3.0,5.0")
-  if (Serial.available() > 0) {
-    String input = Serial.readStringUntil('\n');
-    int commaIndex = input.indexOf(',');
-    if (commaIndex != -1) {
-      speed_angle_queue[0][0] = input.substring(0, commaIndex).toFloat();  // km/h
-      speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat(); // deg
-      while (Serial.available()) Serial.read(); // Flush
-    }
-  }
 
   // 초기 2초간 PID 동작 무시 (안정화 시간)
   if (millis() - startTime < 2000) {
