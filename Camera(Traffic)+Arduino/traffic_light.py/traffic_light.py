@@ -135,6 +135,6 @@ with dai.Device(pipeline) as device:
         cv2.imshow("OAK-D Pro 신호등 인식", frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
-            break
+            break 
 
 cv2.destroyAllWindows()
