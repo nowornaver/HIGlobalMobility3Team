@@ -3,7 +3,7 @@ import time
 import sys
 
 # 시리얼 포트 설정
-serial_port = serial.Serial('COM9', 115200, timeout=1)
+serial_port = serial.Serial('COM9', 9600, timeout=1)
 time.sleep(2)
 
 # 거리 기준 (cm)

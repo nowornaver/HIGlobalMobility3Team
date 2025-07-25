@@ -84,6 +84,8 @@ double value2 = 0.0;
 
 volatile long encoderCount = 0;
 
+unsigned long startTime;
+
 void encoderISR() {
   if (digitalRead(ENCODER_B_PIN)) encoderCount++;
   else encoderCount--;
@@ -148,7 +150,7 @@ double calculateDutyCycle(double totalOutput) {
 
 double getPotValueFromAngle(double angle) {
   index = findIndexForAngle(angle);
-  if (index == -1) return -1;
+  if (index == -1) return -1; 
   angle1 = angles[index]; angle2 = angles[index + 1];
   value1 = potValues[index]; value2 = potValues[index + 1];
   return linearInterpolate(angle, angle1, angle2, value1, value2);
@@ -211,9 +213,9 @@ void Interrupt_10ms() {
 }
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
 
-  startTime = millis();
+startTime = millis();
 
   pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
@@ -231,6 +233,7 @@ void setup() {
   pinMode(ECHO_REAR, INPUT);
 
 
+  Serial.println("Time(ms),Front(cm),Rear(cm)");
   initEncoders();
   clearEncoderCount();
 
@@ -238,10 +241,36 @@ void setup() {
   MsTimer2::start();
 }
 
+float readUltrasonic(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(30);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000);  // timeout 30ms
+  if (duration == 0) return -1; // timeout
+  float distance = duration * 0.0343 / 2;
+  return round(distance / 10.0) * 10; // 10단위 반올림
+}
+
 void loop() {
   setMotor(totalOutput, motor_pwmValue);
   controlSteeringMotor(currentAngle, targetAngle);
 
+  float front = readUltrasonic(TRIG_FRONT, ECHO_FRONT);
+  float rear  = readUltrasonic(TRIG_REAR,  ECHO_REAR);
+
+  unsigned long currentTime = millis() - startTime;
+
+  // CSV 형태 출력: 시간,전방,후방
+  Serial.print(currentTime);
+  Serial.print(",");
+  Serial.print(front);
+  Serial.print(",");
+  Serial.println(rear);
+
+  
 long duration;
   float distance;
 
@@ -261,9 +290,9 @@ long duration;
   distance = duration * 0.0343 / 2;  // cm 단위
 
   // 시리얼 모니터 출력
-  Serial.print("Distance: ");
-  Serial.print(distance);
-  Serial.println(" cm");
+  // Serial.print("Distance: ");
+  // Serial.print(distance);
+  // Serial.println(" cm");
 
   desiredSpeed_mps = desiredSpeed_kph / 3.6;
   target_RPM = (desiredSpeed_mps * 60.0) / (2 * MY_PI * WHEEL_RADIUS);

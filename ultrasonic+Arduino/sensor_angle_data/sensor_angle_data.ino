@@ -7,7 +7,7 @@
 unsigned long startTime;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   startTime = millis();
 
   pinMode(TRIG_FRONT, OUTPUT);
@@ -21,8 +21,6 @@ void setup() {
 }
 
 float readUltrasonic(int trigPin, int echoPin) {
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(30);
   digitalWrite(trigPin, LOW);
