@@ -2,12 +2,10 @@ from ultralytics import YOLO
 import depthai as dai
 import cv2
 import numpy as np
-# import serial
+import serial
 
 # # 시리얼(아두이노) 설정
-# SERIAL_PORT = 'COM3'  # 실제 연결된 포트로 바꿔야 함!
-# SERIAL_BAUD = 9600
-# ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+
 
 # --- 모델 불러오기 ---
 coco_model = YOLO('yolov8m.pt')
@@ -154,11 +152,6 @@ with dai.Device(pipeline) as device:
                         stop_signal = True
                         break
 
-        # --- 실제 아두이노 연동 예시 ---
-        if stop_signal:
-            ser.write(b'STEER_RESET\n')
-        else:
-            ser.write(b'FORWARD\n')
 
         cv2.imshow("OAK-D Pro 신호등/사람/차량 인식", frame)
         key = cv2.waitKey(1) & 0xFF
