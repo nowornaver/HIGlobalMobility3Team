@@ -4,26 +4,14 @@ import cv2
 import numpy as np
 import serial
 
-# 시리얼(아두이노) 설정
-SERIAL_PORT = 'COM3'  # 실제 연결된 포트로 바꿔야 함!
-SERIAL_BAUD = 9600
+SERIAL_PORT = 'COM3'
+SERIAL_BAUD = 115200
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 
-# --- 모델 불러오기 ---
 coco_model = YOLO('yolov8m.pt')
 COCO_TRAFFIC_LIGHT_ID = 9
-COCO_PERSON_ID = 0
-COCO_CAR_IDS = [2, 3, 5, 7]
-state = ""
 my_model = YOLO(r"C:\Users\원수민\HIGlobalMobility3Team12\Camera(Traffic)+Arduino\weights\best.pt")
 MY_TRAFFIC_LIGHT_ID = 0
-
-status_to_color = {
-    "traffic_red": (0, 0, 255),
-    "traffic_yellow": (0, 255, 255),
-    "traffic_green": (0, 255, 0),
-    "unknown": (255, 255, 255)
-}
 
 def get_traffic_light_color(roi):
     if roi.size == 0:
@@ -67,7 +55,7 @@ stereo.depth.link(xout_depth.input)
 with dai.Device(pipeline) as device:
     q_rgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
     q_depth = device.getOutputQueue(name="depth", maxSize=4, blocking=False)
-    print("OAK-D Pro 신호등/사람/차량 인식")
+    print("OAK-D Pro 신호등 인식")
 
     while True:
         in_rgb = q_rgb.get()
@@ -94,7 +82,6 @@ with dai.Device(pipeline) as device:
             cy_depth = min(max(cy_depth, 0), depth_h-1)
             depth_value = depth_frame[cy_depth, cx_depth].item()
 
-            # 신호등
             if cls == COCO_TRAFFIC_LIGHT_ID:
                 roi = frame[y1:y2, x1:x2]
                 status, color = get_traffic_light_color(roi)
@@ -103,28 +90,11 @@ with dai.Device(pipeline) as device:
                 cv2.putText(frame, label, (x1, y1-10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                 cv2.circle(frame, (cx, cy), 5, color, -1)
-
+                # 빨강/노랑 + conf>=0.6일 때만 멈춤, 나머지는 GO
                 if status in ["traffic_red", "traffic_yellow"] and conf >= 0.6:
                     print(f"COCO: {status} conf={conf:.2f} - STOP")
                     stop_signal = True
                     break
-
-            elif cls == COCO_PERSON_ID:
-                color = (255, 200, 0)
-                label = f"Person {conf:.2f} ({depth_value/1000:.2f}m)"
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, label, (x1, y1-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                cv2.circle(frame, (cx, cy), 5, color, -1)
-            elif cls in COCO_CAR_IDS:
-                color = (255, 0, 0)
-                car_classes = ["Car", "Motorcycle", "Bus", "Truck"]
-                class_str = car_classes[COCO_CAR_IDS.index(cls)]
-                label = f"{class_str} {conf:.2f} ({depth_value/1000:.2f}m)"
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, label, (x1, y1-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                cv2.circle(frame, (cx, cy), 5, color, -1)
 
         if not stop_signal:
             my_results = my_model.predict(frame, verbose=False)[0]
@@ -148,23 +118,21 @@ with dai.Device(pipeline) as device:
                     cv2.putText(frame, label, (x1, y1+25),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
                     cv2.circle(frame, (cx, cy), 5, color, -1)
-
                     if status in ["traffic_red", "traffic_yellow"] and conf >= 0.6:
                         print(f"MY: {status} conf={conf:.2f} - STOP")
                         stop_signal = True
                         break
-        # --- 실제 아두이노 연동 예시 ---
+
+        # 아두이노로 명령 전송
         if stop_signal:
             state = "STEER_RESET"
-            ser.write(b'STEER_RESET\n')
-            ser.write()
-
         else:
             state = "FORWARD"
 
-    cmd_str = f"{state},{0}\n"
-    ser.write(cmd_str.encode('utf-8'))
-        cv2.imshow("OAK-D Pro 신호등/사람/차량 인식", frame)
+        cmd_str = f"{state},{0}\n"
+        ser.write(cmd_str.encode('utf-8'))
+
+        cv2.imshow("OAK-D Pro 신호등 인식", frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
