@@ -4,15 +4,17 @@ import cv2
 import numpy as np
 import serial
 
-# # 시리얼(아두이노) 설정
-
+# 시리얼(아두이노) 설정
+SERIAL_PORT = 'COM3'  # 실제 연결된 포트로 바꿔야 함!
+SERIAL_BAUD = 9600
+ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 
 # --- 모델 불러오기 ---
 coco_model = YOLO('yolov8m.pt')
 COCO_TRAFFIC_LIGHT_ID = 9
 COCO_PERSON_ID = 0
 COCO_CAR_IDS = [2, 3, 5, 7]
-
+state = ""
 my_model = YOLO(r"C:\Users\원수민\HIGlobalMobility3Team12\Camera(Traffic)+Arduino\weights\best.pt")
 MY_TRAFFIC_LIGHT_ID = 0
 
@@ -151,8 +153,17 @@ with dai.Device(pipeline) as device:
                         print(f"MY: {status} conf={conf:.2f} - STOP")
                         stop_signal = True
                         break
+        # --- 실제 아두이노 연동 예시 ---
+        if stop_signal:
+            state = "STEER_RESET"
+            ser.write(b'STEER_RESET\n')
+            ser.write()
 
+        else:
+            state = "FORWARD"
 
+    cmd_str = f"{state},{0}\n"
+    ser.write(cmd_str.encode('utf-8'))
         cv2.imshow("OAK-D Pro 신호등/사람/차량 인식", frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):

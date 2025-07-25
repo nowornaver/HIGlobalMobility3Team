@@ -234,19 +234,26 @@ void loop() {
   currentPotValue = analogRead(STEERING_ANALOG_PIN);
   currentAngle = getAngleFromPotValue(currentPotValue);
 
-  if (Serial.available() > 0) {
-    String input = Serial.readStringUntil('\n');
-    if (input.indexOf(',') != -1) {
-      int commaIndex = input.indexOf(',');
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-      speed_angle_queue[0][0] = input.substring(0, commaIndex).toFloat();
-      speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat();
-      speed_angle_queue[0][0]= constrain(speed_angle_queue[0][0], -7.0, 7.0);
-      speed_angle_queue[0][1] = constrain(speed_angle_queue[0][1], -18.0, 18.0);
-      while (Serial.available() > 0) Serial.read();
-    }
+if (Serial.available() > 0) {
+  String input = Serial.readStringUntil('\n');
+  input.trim();  // 공백 제거
+
+  if (input.equalsIgnoreCase("STOP")) {
+    speed_angle_queue[0][0] = 0.0; // 속도 = 0
+    // 조향각은 유지
+  } 
+  else if (input.indexOf(',') != -1) {
+    int commaIndex = input.indexOf(',');
+    speed_angle_queue[1][0] = speed_angle_queue[0][0];
+    speed_angle_queue[1][1] = speed_angle_queue[0][1];
+    speed_angle_queue[0][0] = input.substring(0, commaIndex).toFloat();
+    speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat();
+    speed_angle_queue[0][0] = constrain(speed_angle_queue[0][0], -7.0, 7.0);
+    speed_angle_queue[0][1] = constrain(speed_angle_queue[0][1], -18.0, 18.0);
   }
+
+  while (Serial.available() > 0) Serial.read(); // 버퍼 비우기
+}
 
   desiredSpeed_kph = speed_angle_queue[0][0];
   targetAngle = speed_angle_queue[0][1];
