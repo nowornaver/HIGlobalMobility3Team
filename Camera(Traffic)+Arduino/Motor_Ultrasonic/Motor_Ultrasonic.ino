@@ -117,7 +117,7 @@ void clearEncoderCount() {
 // --- 구동 모터 제어
 void setMotor(double dir, int pwmVal) {
   pwmVal = constrain(abs(pwmVal), 0, 255);
-  digitalWrite(SPEED_MOTOR_FRONT_DIR, dir >= 0 ? HIGH : LOW);
+  digitalWrite(SPEED_MOTOR_FRONT_DIR, dir >= 0 ? LOW : HIGH);
   digitalWrite(SPEED_MOTOR_FRONT_BRK, pwmVal == 0 ? HIGH : LOW);
   analogWrite(SPEED_MOTOR_FRONT_PWM, pwmVal);
 }
@@ -206,9 +206,8 @@ void loop() {
     input.trim();
     int commaIndex = input.indexOf(',');
     if (commaIndex != -1) {
-        String receivedState = input.substring(0, commaIndex);
-        float receivedAngle = input.substring(commaIndex + 1).toFloat();
-        // 받은 값 활용
+receivedState = input.substring(0, commaIndex);
+receivedAngle = input.substring(commaIndex + 1).toFloat();
     }
     // 버퍼 깔끔하게 비우기 (혹시 남은 게 있다면)
     while (Serial.available() > 0) Serial.read();

@@ -15,7 +15,7 @@ COCO_TRAFFIC_LIGHT_ID = 9
 COCO_PERSON_ID = 0
 COCO_CAR_IDS = [2, 3, 5, 7]
 state = ""
-my_model = YOLO(r"C:\Users\원수민\HIGlobalMobility3Team12\Camera(Traffic)+Arduino\weights\best.pt")
+my_model = YOLO(r"C:\ForkPJ\HIGlobalMobility3Team\Camera(Traffic)+Arduino/weights/best.pt")
 MY_TRAFFIC_LIGHT_ID = 0
 
 status_to_color = {
