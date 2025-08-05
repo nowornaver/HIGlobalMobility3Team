@@ -237,6 +237,25 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
 
     }
+
+    else if (receivedState == "TURNRIGHT") {
+      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
+      speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
+      speed_angle_queue[1][0] = speed_angle_queue[0][0];
+      speed_angle_queue[1][1] = speed_angle_queue[0][1];
+      
+    }
+
+
+    else if (receivedState == "TURNLEFT") {
+      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
+      speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
+      speed_angle_queue[1][0] = speed_angle_queue[0][0];
+      speed_angle_queue[1][1] = speed_angle_queue[0][1];
+      
+
+      
+    }
     else {
       // 알 수 없는 상태면 정지
       speed_angle_queue[0][0] = 1.0;
