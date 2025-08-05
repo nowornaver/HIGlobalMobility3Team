@@ -184,7 +184,6 @@ double receivedAngle = 0.0;
 void loop() {
   currentPotValue = analogRead(STEERING_ANALOG_PIN);
 
-  // 시리얼 명령 받기 (예: "3.0,5.0")
 //  if (Serial.available() > 0) {
 //    String input = Serial.readStringUntil('\n');
 //    if (input.indexOf(',') != -1) {
@@ -192,7 +191,7 @@ void loop() {
 //      speed_angle_queue[1][0] = speed_angle_queue[0][0];
 //      speed_angle_queue[1][1] = speed_angle_queue[0][1];
 //      speed_angle_queue[0][0] = input.substring(0, commaIndex).toFloat();
-//      speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat();                         차량 편하게 제어한느 로직 1,0 2,0 
+//      speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat();                    
 //      speed_angle_queue[0][0]= constrain(speed_angle_queue[0][0], -7.0, 7.0);
 //      speed_angle_queue[0][1] = constrain(speed_angle_queue[0][1], -18.0, 18.0);
 //      while (Serial.available() > 0) Serial.read();
@@ -276,7 +275,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
   desiredSpeed_kph = speed_angle_queue[0][0];
   double targetAngle = speed_angle_queue[0][1];
 
-  if (desiredSpeed_kph == 0.0 && targetAngle == 1.0) {
+  if (desiredSpeed_kph == 0.0 || targetAngle == 1.0) {
     setMotor(0, 0);  // 정지
     targetAngle = 1.0;
   } else {
