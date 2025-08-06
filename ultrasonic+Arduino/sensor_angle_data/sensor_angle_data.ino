@@ -13,7 +13,7 @@ volatile uint16_t cnt100ms = 0;
 unsigned long startTime;
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   startTime = millis();
 
   pinMode(TRIG_FRONT, OUTPUT);
@@ -51,8 +51,6 @@ ISR(TIMER1_COMPA_vect) {
   }
 }
 float readUltrasonic(int trigPin, int echoPin) {
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(30);
   digitalWrite(trigPin, LOW);

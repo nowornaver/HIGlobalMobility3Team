@@ -185,67 +185,68 @@ void loop() {
   currentPotValue = analogRead(STEERING_ANALOG_PIN);
 
   // 시리얼 명령 받기 (예: "3.0,5.0")
-//  if (Serial.available() > 0) {
-//    String input = Serial.readStringUntil('\n');
-//    if (input.indexOf(',') != -1) {
-//      int commaIndex = input.indexOf(',');
+  if (Serial.available() > 0) {
+    String input = Serial.readStringUntil('\n');
+    if (input.indexOf(',') != -1) {
+      int commaIndex = input.indexOf(',');
+      speed_angle_queue[1][0] = speed_angle_queue[0][0];
+      speed_angle_queue[1][1] = speed_angle_queue[0][1];
+      speed_angle_queue[0][0] = input.substring(0, commaIndex).toFloat();
+      speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat();                       
+      speed_angle_queue[0][0]= constrain(speed_angle_queue[0][0], -7.0, 7.0);
+      speed_angle_queue[0][1] = constrain(speed_angle_queue[0][1], -18.0, 18.0);
+      while (Serial.available() > 0) Serial.read();
+    }
+  }
+
+
+
+//    if (Serial.available() > 0) {
+//    String input = Serial.readStringUntil('\n'); //(state,angle)
+//    input.trim();
+//    int commaIndex = input.indexOf(',');
+//    if (commaIndex != -1) {
+//        String receivedState = input.substring(0, commaIndex);
+//        float receivedAngle = input.substring(commaIndex + 1).toFloat();
+//        // 받은 값 활용
+//    }
+//    // 버퍼 깔끔하게 비우기 (혹시 남은 게 있다면)
+//    while (Serial.available() > 0) Serial.read();
+//
+//    }
+//
+//
+//       if (receivedState == "REVERSING") {
+//      // 예: 후진 속도, 각도 설정
+//      speed_angle_queue[0][0] = -1.0;  // 후진 속도 (예)
+//      speed_angle_queue[0][1] = 0.0;   // 각도 초기화
 //      speed_angle_queue[1][0] = speed_angle_queue[0][0];
 //      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-//      speed_angle_queue[0][0] = input.substring(0, commaIndex).toFloat();
-//      speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat();                         차량 편하게 제어한느 로직 1,0 2,0 
-//      speed_angle_queue[0][0]= constrain(speed_angle_queue[0][0], -7.0, 7.0);
-//      speed_angle_queue[0][1] = constrain(speed_angle_queue[0][1], -18.0, 18.0);
-//      while (Serial.available() > 0) Serial.read();
+//
 //    }
-//  }
-
-
-
-    if (Serial.available() > 0) {
-    String input = Serial.readStringUntil('\n'); //(state,angle)
-    input.trim();
-    int commaIndex = input.indexOf(',');
-    if (commaIndex != -1) {
-        String receivedState = input.substring(0, commaIndex);
-        float receivedAngle = input.substring(commaIndex + 1).toFloat();
-        // 받은 값 활용
-    }
-    // 버퍼 깔끔하게 비우기 (혹시 남은 게 있다면)
-    while (Serial.available() > 0) Serial.read();
-
-    }
-
-
-       if (receivedState == "REVERSING") {
-      // 예: 후진 속도, 각도 설정
-      speed_angle_queue[0][0] = -1.0;  // 후진 속도 (예)
-      speed_angle_queue[0][1] = 0.0;   // 각도 초기화
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
-    else if (receivedState == "STEER_RESET") {
-      speed_angle_queue[0][0] = 0.0;  
-      speed_angle_queue[0][1] = receivedAngle;   
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
-    else if (receivedState == "FORWARD") {
-      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
-      speed_angle_queue[0][1] = 0.0;   // 각도 초기화
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
-    else {
-      // 알 수 없는 상태면 정지
-      speed_angle_queue[0][0] = 0.0;
-      speed_angle_queue[0][1] = 0.0;
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
+//    else if (receivedState == "STEER_RESET") {
+//      speed_angle_queue[0][0] = 0.0;  
+//      speed_angle_queue[0][1] = receivedAngle;   
+//      speed_angle_queue[1][0] = speed_angle_queue[0][0];
+//      speed_angle_queue[1][1] = speed_angle_queue[0][1];
+//
+//    }
+//    else if (receivedState == "FORWARD") {
+//      
+//      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
+//      speed_angle_queue[0][1] = 0.0;   // 각도 초기화
+//      speed_angle_queue[1][0] = speed_angle_queue[0][0];
+//      speed_angle_queue[1][1] = speed_angle_queue[0][1];
+//
+//    }
+//    else {
+//      // 알 수 없는 상태면 정지
+//      speed_angle_queue[0][0] = 0.0;
+//      speed_angle_queue[0][1] = 0.0;
+//      speed_angle_queue[1][0] = speed_angle_queue[0][0];
+//      speed_angle_queue[1][1] = speed_angle_queue[0][1];
+//
+//    }
 
   // 초기 2초간 PID 동작 무시 (안정화 시간)
   if (millis() - startTime < 2000) {

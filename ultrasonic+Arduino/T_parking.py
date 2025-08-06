@@ -3,7 +3,7 @@ import time
 
 # 하나의 보드만 연결됨
 serial_port = serial.Serial('COM8', 9600, timeout=1)
-serial_port1 = serial.Serial('COM9',115200,timeout=1) #Vs code -> MotorController
+# serial_port1 = serial.Serial('COM9',115200,timeout=1) #Vs code -> MotorController
 time.sleep(2)
 
 # 거리 기준 (cm)
@@ -70,7 +70,7 @@ def main():
 
         
         cmd_str = f"{state},{angle}\n"
-        serial_port1.write(cmd_str.encode('utf-8'))
+        serial_port.write(cmd_str.encode('utf-8'))
 
         time.sleep(0.1)
 
