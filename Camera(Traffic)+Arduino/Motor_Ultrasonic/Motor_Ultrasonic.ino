@@ -217,7 +217,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
 
        if (receivedState == "REVERSING") {
       // 예: 후진 속도, 각도 설정
-      speed_angle_queue[0][0] = -1.0;  // 후진 속도 (예)
+      speed_angle_queue[0][0] = -0.5;  // 후진 속도 (예)
       speed_angle_queue[0][1] = 0.0;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -231,7 +231,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
 
     }
     else if (receivedState == "FORWARD") {
-      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
+      speed_angle_queue[0][0] = 0.5;   // 전진 속도 (예)
       speed_angle_queue[0][1] = 0.0;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -239,7 +239,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
     }
     else {
       // 알 수 없는 상태면 정지
-      speed_angle_queue[0][0] = 1.0;
+      speed_angle_queue[0][0] = 0.5;
       speed_angle_queue[0][1] = 0.0;
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
