@@ -28,8 +28,10 @@ while True:
 
     # 좌우 조향
     if keyboard.is_pressed('a'):
+        state = "TURNLEFT"
         Steering_angle -= 1
     elif keyboard.is_pressed('d'):
+        state = "TURNRIGHT"
         Steering_angle += 1
 
     # 조향각 제한
