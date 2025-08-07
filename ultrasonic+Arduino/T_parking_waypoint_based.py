@@ -107,7 +107,7 @@ def main():
                 front_safe_count = 0
 
         elif state == "WAYPOINT":
-            print("\n🛰️ 웨이포인트 따라 주행 중... (이후 통합 제어에서 처리 예정)")
+            print("\n🛰️ 웨이포인트 따라 주행 중... (이후 통합 제어에서 처리 예정)") #state,Steering_angle #속도,Steering_angle  속도 = 0;
             break
 
         time.sleep(0.1)
