@@ -7,8 +7,11 @@
 volatile bool flag1ms = false;
 volatile bool flag10ms = false;
 volatile bool flag100ms = false;
+volatile bool flag50ms = false;
 
 volatile uint16_t cnt10ms = 0;
+volatile uint16_t cnt50ms = 0;
+
 volatile uint16_t cnt100ms = 0;
 unsigned long startTime;
 
@@ -40,7 +43,7 @@ ISR(TIMER1_COMPA_vect) {
   flag1ms = true;
   cnt10ms++;
   cnt100ms++;
-
+  cnt50ms++;
   if (cnt10ms >= 10) {   // 10ms
     flag10ms = true;
     cnt10ms = 0;
@@ -48,6 +51,10 @@ ISR(TIMER1_COMPA_vect) {
   if (cnt100ms >= 100) { // 100ms
     flag100ms = true;
     cnt100ms = 0;
+  }
+  if (cnt50ms >=50) {
+    flag50ms = true;
+    cnt50ms = 0 ;
   }
 }
 float readUltrasonic(int trigPin, int echoPin) {

@@ -1,5 +1,5 @@
 #include <MsTimer2.h>
-
+#include <avr/interrupt.h>
 // 속도 모터 핀 설정
 #define SPEED_MOTOR_FRONT_PWM  5
 #define SPEED_MOTOR_FRONT_DIR  6
@@ -14,6 +14,15 @@
 #define STEERING_MOTOR_PWM_PIN  8
 #define STEERING_MOTOR_DIR_PIN  9
 #define STEERING_MOTOR_BRK_PIN  10
+volatile bool flag1ms = false;
+volatile bool flag10ms = false;
+volatile bool flag100ms = false;
+volatile bool flag50ms = false;
+
+volatile uint16_t cnt10ms = 0;
+volatile uint16_t cnt100ms = 0;
+volatile uint16_t cnt50ms = 0;
+unsigned long startTime;
 
 // 타이머
 int toggle_count = 0;
@@ -151,11 +160,22 @@ int calculateDutyCycle(double output) {
 }
 
 // --- Setup
-unsigned long startTime = 0;
+//unsigned long startTime = 0;
 
 void setup() {
   Serial.begin(115200);
+ noInterrupts();  // 인터럽트 비활성화
+  // Timer1 초기화
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
 
+  OCR1A = 249;  // 1ms마다 인터럽트 (16MHz / 64 prescaler)
+  TCCR1B |= (1 << WGM12);         // CTC 모드
+  TCCR1B |= (1 << CS11) | (1 << CS10); // 분주율 64
+  TIMSK1 |= (1 << OCIE1A);        // 비교 일치 인터럽트 허용
+
+  interrupts();   // 인터럽트 활성화
   pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_BRK, OUTPUT);
@@ -175,7 +195,25 @@ void setup() {
 
   startTime = millis();  // ✅ 초기 2초 무시
 }
+ISR(TIMER1_COMPA_vect) {
+  flag1ms = true;
+  cnt10ms++;
+  cnt100ms++;
+  cnt50ms++;
+  if (cnt10ms >= 10) {   // 10ms
+    flag10ms = true;
+    cnt10ms = 0;
+  }
+  if (cnt100ms >= 100) { // 100ms
+    flag100ms = true;
+    cnt100ms = 0;
+  }
 
+    if (cnt50ms >=50) {
+    flag50ms = true;
+    cnt50ms = 0 ;
+  }
+}
 // --- Main Loop
 
 String receivedState = "";
@@ -199,6 +237,8 @@ void loop() {
 //  }
 
 
+if (flag100ms) {
+      flag100ms = false;
 
     if (Serial.available() > 0) {
     String input = Serial.readStringUntil('\n'); //(state,angle)
@@ -238,7 +278,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
     }
 
     else if (receivedState == "TURNRIGHT") {
-      speed_angle_queue[0][0] =  desiredSpeed_kph;   // 전진 속도 (예)
+      speed_angle_queue[0][0] =  0.5;   // 전진 속도 (예)
       speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -247,7 +287,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
 
 
     else if (receivedState == "TURNLEFT") {
-      speed_angle_queue[0][0] =  desiredSpeed_kph;   // 전진 속도 (예)
+      speed_angle_queue[0][0] =  0.5;   // 전진 속도 (예)
       speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -298,6 +338,11 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
   Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
   Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
 
-  do { delay(1); } while (toggle_count <= 9);
+  do { 
+    
+    delay(1); 
+  } 
+  while (toggle_count <= 9);
   toggle_count = 0;
+}
 }
