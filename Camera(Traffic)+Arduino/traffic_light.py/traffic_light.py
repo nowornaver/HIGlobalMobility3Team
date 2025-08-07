@@ -2,43 +2,53 @@ from ultralytics import YOLO
 import depthai as dai
 import cv2
 import numpy as np
-import serial
+import time
+# import serial
 
-SERIAL_PORT = 'COM3'
-SERIAL_BAUD = 115200
-ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+# # 아두이노 시리얼 설정 (필요 시 활성화)
+# SERIAL_PORT, SERIAL_BAUD = 'COM4', 115200
+# ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 
-coco_model = YOLO('yolov8m.pt')
-COCO_TRAFFIC_LIGHT_ID = 9
-my_model = YOLO(r"C:\Users\원수민\HIGlobalMobility3Team12\Camera(Traffic)+Arduino\weights\best.pt")
-MY_TRAFFIC_LIGHT_ID = 0
+# 모델 로드
+coco_model = YOLO('yolov8n.pt')
+my_model   = YOLO(r"C:\Users\원수민\HIGlobalMobility3Team12\Camera(Traffic)+Arduino\weights\best.pt")
+COCO_ID, MY_ID = 9, 0
 
+# 신호등 색상 판별 함수
 def get_traffic_light_color(roi):
     if roi.size == 0:
         return 'unknown', (255,255,255)
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    mask_red = cv2.inRange(hsv, (0, 70, 50), (10, 255, 255)) + \
-               cv2.inRange(hsv, (170, 70, 50), (180, 255, 255))
-    mask_yellow = cv2.inRange(hsv, (20, 100, 100), (35, 255, 255))
-    mask_green = cv2.inRange(hsv, (40, 50, 50), (90, 255, 255))
-    counts = [cv2.countNonZero(mask_red), cv2.countNonZero(mask_yellow), cv2.countNonZero(mask_green)]
+    masks = [
+        cv2.inRange(hsv, (0,70,50), (15,255,255)) + cv2.inRange(hsv, (170,70,50), (180,255,255)),
+        cv2.inRange(hsv, (20,100,100), (35,255,255)),
+        cv2.inRange(hsv, (40,50,50), (90,255,255))
+    ]
+    counts = [cv2.countNonZero(m) for m in masks]
     idx = np.argmax(counts)
-    status_list = ["traffic_red", "traffic_yellow", "traffic_green"]
-    color_list = [(0,0,255), (0,255,255), (0,255,0)]
-    status = status_list[idx] if max(counts)>5 else "unknown"
-    color = color_list[idx] if max(counts)>5 else (255,255,255)
-    return status, color
+    status_list = ['traffic_red','traffic_yellow','traffic_green']
+    color_list  = [(0,0,255),(0,255,255),(0,255,0)]
+    return (status_list[idx], color_list[idx]) if max(counts)>5 else ('unknown',(255,255,255))
 
+# DepthAI 파이프라인 설정
 pipeline = dai.Pipeline()
 cam_rgb = pipeline.create(dai.node.ColorCamera)
-cam_rgb.setPreviewSize(640, 480)
+cam_rgb.setResolution(dai.ColorCameraProperties.SensorResolution.THE_1080_P)
+
+cam_rgb.setFps(30)
+cam_rgb.setPreviewSize(640, 480)  # 추론 및 시각화용
 cam_rgb.setColorOrder(dai.ColorCameraProperties.ColorOrder.BGR)
 cam_rgb.setInterleaved(False)
+
+cam_rgb.initialControl.setAutoFocusMode(dai.CameraControl.AutoFocusMode.OFF)
+cam_rgb.initialControl.setManualFocus(130)  # 0–255 사이 값, 실험적으로 조정
+
 xout_rgb = pipeline.create(dai.node.XLinkOut)
-xout_rgb.setStreamName("rgb")
+xout_rgb.setStreamName('rgb')
 cam_rgb.preview.link(xout_rgb.input)
 
-mono_left = pipeline.create(dai.node.MonoCamera)
+# 스테레오 카메라 및 깊이 설정
+mono_left  = pipeline.create(dai.node.MonoCamera)
 mono_right = pipeline.create(dai.node.MonoCamera)
 mono_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
 mono_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_400_P)
@@ -48,93 +58,67 @@ mono_right.setBoardSocket(dai.CameraBoardSocket.CAM_C)
 stereo = pipeline.create(dai.node.StereoDepth)
 mono_left.out.link(stereo.left)
 mono_right.out.link(stereo.right)
+
 xout_depth = pipeline.create(dai.node.XLinkOut)
-xout_depth.setStreamName("depth")
+xout_depth.setStreamName('depth')
 stereo.depth.link(xout_depth.input)
 
+# 장치 실행
 with dai.Device(pipeline) as device:
-    q_rgb = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
-    q_depth = device.getOutputQueue(name="depth", maxSize=4, blocking=False)
-    print("OAK-D Pro 신호등 인식")
+    q_rgb   = device.getOutputQueue('rgb',   maxSize=4, blocking=False)
+    q_depth = device.getOutputQueue('depth', maxSize=4, blocking=False)
+    print('실행 중... 종료: q')
+
+    frame_count, interval = 0, 5
+    prev_boxes, prev_state = [], 'FORWARD'
 
     while True:
-        in_rgb = q_rgb.get()
-        frame = in_rgb.getCvFrame()
-        in_depth = q_depth.get()
-        depth_frame = in_depth.getFrame()
+        start = time.time()
+        frame       = q_rgb.get().getCvFrame()
+        depth_frame = q_depth.get().getFrame()
+        h, w = frame.shape[:2]
 
-        rgb_h, rgb_w = frame.shape[:2]
-        depth_h, depth_w = depth_frame.shape[:2]
+        boxes, found = [], False
+        frame_count += 1
 
-        stop_signal = False
-
-        # === COCO 모델 ===
-        coco_results = coco_model.predict(frame, verbose=False)[0]
-        for box in coco_results.boxes:
-            cls = int(box.cls[0])
-            conf = float(box.conf[0])
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            cx = x1 + (x2-x1)//2
-            cy = y1 + (y2-y1)//2
-            cx_depth = int(cx * depth_w / rgb_w)
-            cy_depth = int(cy * depth_h / rgb_h)
-            cx_depth = min(max(cx_depth, 0), depth_w-1)
-            cy_depth = min(max(cy_depth, 0), depth_h-1)
-            depth_value = depth_frame[cy_depth, cx_depth].item()
-
-            if cls == COCO_TRAFFIC_LIGHT_ID:
-                roi = frame[y1:y2, x1:x2]
-                status, color = get_traffic_light_color(roi)
-                label = f"{status} {conf:.2f} ({depth_value/1000:.2f}m)"
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, label, (x1, y1-10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                cv2.circle(frame, (cx, cy), 5, color, -1)
-                # 빨강/노랑 + conf>=0.6일 때만 멈춤, 나머지는 GO
-                if status in ["traffic_red", "traffic_yellow"] and conf >= 0.6:
-                    print(f"COCO: {status} conf={conf:.2f} - STOP")
-                    stop_signal = True
-                    break
-
-        if not stop_signal:
-            my_results = my_model.predict(frame, verbose=False)[0]
-            for box in my_results.boxes:
-                cls = int(box.cls[0])
-                conf = float(box.conf[0])
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cx = x1 + (x2-x1)//2
-                cy = y1 + (y2-y1)//2
-                cx_depth = int(cx * depth_w / rgb_w)
-                cy_depth = int(cy * depth_h / rgb_h)
-                cx_depth = min(max(cx_depth, 0), depth_w-1)
-                cy_depth = min(max(cy_depth, 0), depth_h-1)
-                depth_value = depth_frame[cy_depth, cx_depth].item()
-
-                if cls == MY_TRAFFIC_LIGHT_ID:
-                    roi = frame[y1:y2, x1:x2]
-                    status, color = get_traffic_light_color(roi)
-                    label = f"MY_{status} {conf:.2f} ({depth_value/1000:.2f}m)"
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                    cv2.putText(frame, label, (x1, y1+25),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                    cv2.circle(frame, (cx, cy), 5, color, -1)
-                    if status in ["traffic_red", "traffic_yellow"] and conf >= 0.6:
-                        print(f"MY: {status} conf={conf:.2f} - STOP")
-                        stop_signal = True
-                        break
-
-        # 아두이노로 명령 전송
-        if stop_signal:
-            state = "STEER_RESET"
+        # 주기적 YOLO 추론
+        if frame_count % interval == 0:
+            for model, tid, prefix in [(coco_model, COCO_ID, ''),(my_model, MY_ID, 'MY_')]:
+                try:
+                    res = model.predict(frame, verbose=False, device='cpu')[0]
+                except Exception as e:
+                    print(prefix+' 모델 오류:', e)
+                    continue
+                for b in res.boxes:
+                    cls, conf = int(b.cls[0]), float(b.conf[0])
+                    if cls!=tid or conf<0.6: continue
+                    x1,y1,x2,y2 = map(int, b.xyxy[0])
+                    cx, cy = (x1+x2)//2, (y1+y2)//2
+                    dx = int(cx*depth_frame.shape[1]/w)
+                    dy = int(cy*depth_frame.shape[0]/h)
+                    dist = depth_frame[dy,dx].item()/1000
+                    status,color = get_traffic_light_color(frame[y1:y2,x1:x2])
+                    boxes.append((x1,y1,x2,y2,color,f"{prefix}{status} {conf:.2f} ({dist:.2f}m)"))
+                    if status in ['traffic_red','traffic_yellow']:
+                        prev_state, found = 'STEER_RESET', True
+                    elif status=='traffic_green':
+                        prev_state, found = 'FORWARD', True
+                    if found: break
+                if found: break
+            prev_boxes = boxes
         else:
-            state = "FORWARD"
+            boxes = prev_boxes
 
-        cmd_str = f"{state},{0}\n"
-        ser.write(cmd_str.encode('utf-8'))
+        # 박스 그리기 및 화면 출력
+        for x1,y1,x2,y2,col,label in boxes:
+            cv2.rectangle(frame,(x1,y1),(x2,y2),col,2)
+            cv2.putText(frame,label,(x1,y1-10),cv2.FONT_HERSHEY_SIMPLEX,0.7,col,2)
 
-        cv2.imshow("OAK-D Pro 신호등 인식", frame)
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
-            break 
+        cv2.imshow('OAK-D 신호등 인식', frame)
+        if cv2.waitKey(1)&0xFF==ord('q'): break
+
+        elapsed = time.time()-start
+        fps = 1/elapsed if elapsed>0 else 0
+        print(f"시간:{elapsed:.3f}s, FPS:{fps:.1f}")
 
 cv2.destroyAllWindows()
