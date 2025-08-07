@@ -1,6 +1,7 @@
 import serial
 import keyboard  # pip install keyboard
 import time
+
 SERIAL_PORT = 'COM9'
 SERIAL_BAUD = 115200
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
@@ -10,17 +11,22 @@ state = "STOP"
 
 print("WASD로 제어, ESC로 종료")
 
+prev_state = "STOP"  # 이전 상태 저장
+
 while True:
     if keyboard.is_pressed('esc'):
         break
 
+    # 기본 상태는 STOP
+    state = "STOP"
+
+    # 전후진
     if keyboard.is_pressed('w'):
         state = "FORWARD"
     elif keyboard.is_pressed('s'):
         state = "REVERSING"
-    else:
-        state = "STOP"
 
+    # 좌우 조향
     if keyboard.is_pressed('a'):
         Steering_angle -= 1
     elif keyboard.is_pressed('d'):
@@ -32,10 +38,11 @@ while True:
     elif Steering_angle > 21:
         Steering_angle = 21
 
-    # 시리얼 전송
-    cmd_str = f"{state},{Steering_angle}\n"
-    ser.write(cmd_str.encode('utf-8'))
-    print(f"전송: {cmd_str.strip()}")
+    # 상태가 변했을 때만 전송 (불필요한 중복 전송 방지)
+    if state != prev_state or state != "STOP":
+        cmd_str = f"{state},{Steering_angle}\n"
+        ser.write(cmd_str.encode('utf-8'))
+        print(f"전송: {cmd_str.strip()}")
+        prev_state = state
 
-    # 0.1초마다 전송
     time.sleep(0.1)
