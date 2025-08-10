@@ -1,3 +1,5 @@
+#include <Arduino_FreeRTOS.h>
+
 #include <MsTimer2.h>
 
 // 속도 모터 핀 설정
@@ -14,10 +16,16 @@
 #define STEERING_MOTOR_PWM_PIN  8
 #define STEERING_MOTOR_DIR_PIN  9
 #define STEERING_MOTOR_BRK_PIN  10
+enum ControlMode {
+  MODE_MANUAL,
+  MODE_GPS
+};
+
+ControlMode currentMode = MODE_MANUAL;
 
 // 타이머
 int toggle_count = 0;
-void Interrupt_10ms() { toggle_count++; }
+//void Interrupt_10ms() { toggle_count++; }
 volatile char rxData;
 volatile bool newDataFlag = false;
 volatile bool txReady = true;
@@ -48,10 +56,11 @@ double rpm = 0.0;
 const int numReadings = 5;
 double readings[numReadings] = {0}, total = 0;
 int readIndex = 0;
-int steeringAngle = 0;  // 조향각 상태 변수 (예: -16 ~ 21 제한)
 //char steeringAngle = 0;  // GPS 에서 받은 조향각
 
-int speed = 0;
+volatile int speed1 = 0;
+volatile int8_t  steeringAngle = 0;  // 조향각 상태 변수 (예: -16 ~ 21 제한)
+
 // 조향 PID 변수 (Pot 기반)
 int currentPotValue = 0, targetPotValue = 0;
 double steering_pwmValue = 0.0;
@@ -61,7 +70,7 @@ double previous_error_steering = 0.0;
 const double integralLimit = 50.0;
 
 // 시리얼 입력값
-double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
+volatile double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 
 
 // UART1 RX 인터럽트
@@ -82,7 +91,24 @@ ISR(USART1_UDRE_vect) {
 
   }
 }
-
+void handleManualControl(char cmd) {
+  switch (cmd) {
+    case 'w': 
+      speed1 = 0.5; break;
+    case 's': 
+      speed1 = -0.5; break;
+    case 'a': 
+        steeringAngle = max(-16, steeringAngle - 5); 
+        break;
+    case 'd': 
+        steeringAngle = min(21, steeringAngle + 5); 
+        break;
+    case 'x': 
+        speed1 = 0.0; 
+        steeringAngle = 0; 
+        break;
+  }
+}
 // 한 바이트 송신
 void sendByte(char data) {
   while (!txReady);   // 이전 전송 완료 대기
@@ -101,7 +127,7 @@ void UART1_init(unsigned long baud) {
   UCSR1C = (1 << UCSZ11) | (1 << UCSZ10); // 데이터 8비트, 패리티 없음, 1 스톱비트
 }
 // --- 선형 보간: 목표 각도 → 목표 Pot 값
-int getPotFromAngle(double targetAngle) {
+int getPotFromAngle(int targetAngle) {
   const double angle0 = -17.0;
   const double angle1 = 22.0;
   const int pot0 = 10;
@@ -193,101 +219,44 @@ int calculateDutyCycle(double output) {
   return constrain((int)output, -127, 127);
 }
 
-// --- Setup
-unsigned long startTime = 0;
+void handleGPSData(char data) {
+  
+  // 여기서 GPS 각도 처리 로직 구현
+  // 예: 데이터 프로토콜을 따로 설계
 
-void setup() {
-  Serial.begin(9600); // USB 시리얼 (디버깅용)
-  UART1_init(9600);   // UART1 초기화
-  pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
-  pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
-  pinMode(SPEED_MOTOR_FRONT_BRK, OUTPUT);
+    steeringAngle = (int8_t)data;
 
-  pinMode(STEERING_MOTOR_PWM_PIN, OUTPUT);
-  pinMode(STEERING_MOTOR_DIR_PIN, OUTPUT);
-  pinMode(STEERING_MOTOR_BRK_PIN, OUTPUT);
-
-  pinMode(STEERING_ANALOG_PIN, INPUT);
-  initEncoders();
-  clearEncoderCount();
-
-  previous_pos = readEncoder();  // ✅ 초기값 설정
-
-  MsTimer2::set(10, Interrupt_10ms);
-  MsTimer2::start();
-
-  startTime = millis();  // ✅ 초기 2초 무시
+  // 유효 범위 제한
+  if (steeringAngle < -16 || steeringAngle > 21) {
+    steeringAngle = 0; // 범위 벗어나면 기본값으로
+  }
+}
+void SensorTask(void *pvParameters) {
+  for (;;) {
+    // 센서 읽기 코드
+    vTaskDelay(50 / portTICK_PERIOD_MS); // 20Hz 주기
+  }
 }
 
-// --- Main Loop
+void ControlTask(void *pvParameters) {
+  int angle = (int)steeringAngle; 
 
-String receivedState = "";
-String receivedAngleStr = "";
-double receivedAngle = 0.0;
-void loop() {
-  currentPotValue = analogRead(STEERING_ANALOG_PIN);
-
-int angle = (int)steeringAngle; 
-
-
-if (newDataFlag) {
-  newDataFlag = false;
+  for (;;) {
+       currentPotValue = analogRead(STEERING_ANALOG_PIN);
   
-    switch (rxData) {
-      case 'w':  // 전진
-        speed = 0.5;  
-        // 조향각은 유지
-        break;
+    // PID 연산, 모터 제어
+    vTaskDelay(10 / portTICK_PERIOD_MS); // 100Hz 주기
 
-      case 's':  // 후진
-        speed = -0.5;
-        // 조향각 유지
-        break;
-
-      case 'a':  // 좌회전
-        steeringAngle -= 5;
-        if (steeringAngle < -16) steeringAngle = -16;
-        // 속도 유지
-        break;
-
-      case 'd':  // 우회전
-        steeringAngle += 5;
-        if (steeringAngle > 21) steeringAngle = 21;
-        // 속도 유지
-        break;
-
-      case 'x':  // 정지 명령 (예)
-        speed = 0.0;
-        steeringAngle = 0;
-        break;
-
-      default:
-        // 기타 입력 무시
-        break;
-    }
-if (angle >20 || angle <-15) {
+    if (angle >20 || angle <-15) {
   angle = 0;
 }
-   speed_angle_queue[0][0] = speed;
-    speed_angle_queue[0][1] = steeringAngle; //angle 로 바꾸면 GPS 에서 수신
-    speed_angle_queue[1][0] = speed;
-    speed_angle_queue[1][1] = steeringAngle; //angle
-
-   sendByte(rxData); // 받은 데이터 그대로 송신 (에코)
-
-}
-
-
-  // 초기 2초간 PID 동작 무시 (안정화 시간)
-  if (millis() - startTime < 2000) {
-    setMotor(0, 0);
-    clearEncoderCount();
-    previous_pos = readEncoder();
-    return;
-  }
-
+    speed_angle_queue[0][0] = speed1;
+    speed_angle_queue[0][1] = angle;
+    speed_angle_queue[1][0] = speed1;
+    speed_angle_queue[1][1] = angle;
+    
   desiredSpeed_kph = speed_angle_queue[0][0];
-  double targetAngle = speed_angle_queue[0][1];
+  int targetAngle = speed_angle_queue[0][1];
 
   if (desiredSpeed_kph == 0.0) {
     setMotor(0, 0);  // 정지
@@ -304,14 +273,72 @@ if (angle >20 || angle <-15) {
   targetPotValue = getPotFromAngle(targetAngle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
-//
-//  Serial.print("RPM_Target:"); Serial.print(target_RPM);
-//  Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
-//  Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
-//  Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
-//  Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
-//  Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
+    
+    
 
-  do { delay(1); } while (toggle_count <= 9);
-  toggle_count = 0;
+     
+
+  }
+}
+
+void CommTask(void *pvParameters) {
+  for (;;) {
+    // UART 수신 처리
+    vTaskDelay(20 / portTICK_PERIOD_MS); // 50Hz 주기
+
+    if (newDataFlag) {
+  newDataFlag = false;
+      if (rxData == '1') {
+        currentMode = MODE_MANUAL;
+        Serial.println("Manual mode");
+        continue;
+      }
+      if (rxData == '2') {
+        currentMode = MODE_GPS;
+        Serial.println("GPS mode");
+        continue;
+      }
+
+      // 모드별 처리
+      if (currentMode == MODE_MANUAL) {
+        handleManualControl(rxData);
+      }
+      else if (currentMode == MODE_GPS) {
+        handleGPSData(rxData);
+      }
+
+  }
+}
+}
+// --- Setup
+
+void setup() {
+
+
+  Serial.begin(9600); // USB 시리얼 (디버깅용)
+  UART1_init(9600);   // UART1 초기화
+  pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
+  pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
+  pinMode(SPEED_MOTOR_FRONT_BRK, OUTPUT);
+
+  pinMode(STEERING_MOTOR_PWM_PIN, OUTPUT);
+  pinMode(STEERING_MOTOR_DIR_PIN, OUTPUT);
+  pinMode(STEERING_MOTOR_BRK_PIN, OUTPUT);
+
+  pinMode(STEERING_ANALOG_PIN, INPUT);
+  initEncoders();
+  clearEncoderCount();
+
+  previous_pos = readEncoder();  // ✅ 초기값 설정
+
+  xTaskCreate(SensorTask, "Sensor", 128, NULL, 2, NULL);
+  xTaskCreate(ControlTask, "Control", 128, NULL, 3, NULL);
+  xTaskCreate(CommTask, "Comm", 128, NULL, 1, NULL);
+}
+
+// --- Main Loop
+
+void loop() {
+
+
 }
