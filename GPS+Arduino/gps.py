@@ -314,7 +314,7 @@ def gps_thread():
                             print(f"Raw steering: {angle:.2f}, Filtered steering: {filtered_steering_angle:.2f}")
                             int_angle = int(round(filtered_steering_angle))
 
-    ser.write(int_angle .to_bytes(1, byteorder='little', signed=True))  # 조향각 1바이트 전송
+                            ser.write(int_angle .to_bytes(1, byteorder='little', signed=True))  # 조향각 1바이트 전송
                             with open(OUTPUT_CSV, 'a', newline='') as f:
                                 writer = csv.writer(f)
                                 writer.writerow([
