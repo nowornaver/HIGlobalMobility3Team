@@ -18,7 +18,10 @@
 // 타이머
 int toggle_count = 0;
 void Interrupt_10ms() { toggle_count++; }
-
+volatile char rxData;
+volatile bool newDataFlag = false;
+volatile bool txReady = true;
+volatile char txData;
 // 구동 PID 변수
 double deltaT = 0.1;
 const int ENCODER_COUNTS_PER_REV = 300;
@@ -45,7 +48,10 @@ double rpm = 0.0;
 const int numReadings = 5;
 double readings[numReadings] = {0}, total = 0;
 int readIndex = 0;
+int steeringAngle = 0;  // 조향각 상태 변수 (예: -16 ~ 21 제한)
+//char steeringAngle = 0;  // GPS 에서 받은 조향각
 
+int speed = 0;
 // 조향 PID 변수 (Pot 기반)
 int currentPotValue = 0, targetPotValue = 0;
 double steering_pwmValue = 0.0;
@@ -57,6 +63,43 @@ const double integralLimit = 50.0;
 // 시리얼 입력값
 double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 
+
+// UART1 RX 인터럽트
+ISR(USART1_RX_vect) {
+  rxData = UDR1;       // 수신 데이터 읽기
+  newDataFlag = true;  // 수신 플래그 설정
+      Serial.println("RX ISR");
+
+}
+
+// UART1 TX 데이터 레지스터 빈 상태 인터럽트
+ISR(USART1_UDRE_vect) {
+  if (!txReady) {
+    UDR1 = txData;    // 데이터 전송
+    txReady = true;   // 전송 완료
+    UCSR1B &= ~(1 << UDRIE1); // 인터럽트 비활성화
+          Serial.println("TX ISR");
+
+  }
+}
+
+// 한 바이트 송신
+void sendByte(char data) {
+  while (!txReady);   // 이전 전송 완료 대기
+  txData = data;
+  txReady = false;
+  UCSR1B |= (1 << UDRIE1); // TX 인터럽트 활성화
+//  Serial.println(txData);
+}
+
+void UART1_init(unsigned long baud) {
+  uint16_t ubrr = (F_CPU / 16 / baud) - 1;
+  UBRR1H = (ubrr >> 8);
+  UBRR1L = ubrr;
+  
+  UCSR1B = (1 << RXEN1) | (1 << TXEN1) | (1 << RXCIE1); // RX, TX, RX 인터럽트
+  UCSR1C = (1 << UCSZ11) | (1 << UCSZ10); // 데이터 8비트, 패리티 없음, 1 스톱비트
+}
 // --- 선형 보간: 목표 각도 → 목표 Pot 값
 int getPotFromAngle(double targetAngle) {
   const double angle0 = -17.0;
@@ -154,8 +197,8 @@ int calculateDutyCycle(double output) {
 unsigned long startTime = 0;
 
 void setup() {
-  Serial.begin(115200);
-
+  Serial.begin(9600); // USB 시리얼 (디버깅용)
+  UART1_init(9600);   // UART1 초기화
   pinMode(SPEED_MOTOR_FRONT_PWM, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_DIR, OUTPUT);
   pinMode(SPEED_MOTOR_FRONT_BRK, OUTPUT);
@@ -184,85 +227,56 @@ double receivedAngle = 0.0;
 void loop() {
   currentPotValue = analogRead(STEERING_ANALOG_PIN);
 
-//  if (Serial.available() > 0) {
-//    String input = Serial.readStringUntil('\n');
-//    if (input.indexOf(',') != -1) {
-//      int commaIndex = input.indexOf(',');
-//      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-//      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-//      speed_angle_queue[0][0] = input.substring(0, commaIndex).toFloat();
-//      speed_angle_queue[0][1] = input.substring(commaIndex + 1).toFloat();                    
-//      speed_angle_queue[0][0]= constrain(speed_angle_queue[0][0], -7.0, 7.0);
-//      speed_angle_queue[0][1] = constrain(speed_angle_queue[0][1], -18.0, 18.0);
-//      while (Serial.available() > 0) Serial.read();
-//    }
-//  }
+int angle = (int)steeringAngle; 
 
 
+if (newDataFlag) {
+  newDataFlag = false;
+  
+    switch (rxData) {
+      case 'w':  // 전진
+        speed = 0.5;  
+        // 조향각은 유지
+        break;
 
-    if (Serial.available() > 0) {
-    String input = Serial.readStringUntil('\n'); //(state,angle)
-    input.trim();
-    int commaIndex = input.indexOf(',');
-    if (commaIndex != -1) {
-receivedState = input.substring(0, commaIndex);
-receivedAngle = input.substring(commaIndex + 1).toFloat();
+      case 's':  // 후진
+        speed = -0.5;
+        // 조향각 유지
+        break;
+
+      case 'a':  // 좌회전
+        steeringAngle -= 5;
+        if (steeringAngle < -16) steeringAngle = -16;
+        // 속도 유지
+        break;
+
+      case 'd':  // 우회전
+        steeringAngle += 5;
+        if (steeringAngle > 21) steeringAngle = 21;
+        // 속도 유지
+        break;
+
+      case 'x':  // 정지 명령 (예)
+        speed = 0.0;
+        steeringAngle = 0;
+        break;
+
+      default:
+        // 기타 입력 무시
+        break;
     }
-    // 버퍼 깔끔하게 비우기 (혹시 남은 게 있다면)
-    while (Serial.available() > 0) Serial.read();
+if (angle >20 || angle <-15) {
+  angle = 0;
+}
+   speed_angle_queue[0][0] = speed;
+    speed_angle_queue[0][1] = steeringAngle; //angle 로 바꾸면 GPS 에서 수신
+    speed_angle_queue[1][0] = speed;
+    speed_angle_queue[1][1] = steeringAngle; //angle
 
-    }
+   sendByte(rxData); // 받은 데이터 그대로 송신 (에코)
 
+}
 
-       if (receivedState == "REVERSING") {
-      // 예: 후진 속도, 각도 설정
-      speed_angle_queue[0][0] = -0.5;  // 후진 속도 (예)
-      speed_angle_queue[0][1] = 0.0;   // 각도 초기화
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
-    else if (receivedState == "STEER_RESET") {
-      speed_angle_queue[0][0] = 0.0;  
-      speed_angle_queue[0][1] = receivedAngle;   
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
-    else if (receivedState == "FORWARD") {
-      speed_angle_queue[0][0] = 0.5;   // 전진 속도 (예)
-      speed_angle_queue[0][1] = 0.0;   // 각도 초기화
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
-
-    else if (receivedState == "TURNRIGHT") {
-      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
-      speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-      
-    }
-
-
-    else if (receivedState == "TURNLEFT") {
-      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
-      speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-      
-
-      
-    }
-    else {
-      // 알 수 없는 상태면 정지
-      speed_angle_queue[0][0] = 0.5;
-      speed_angle_queue[0][1] = 0.0;
-      speed_angle_queue[1][0] = speed_angle_queue[0][0];
-      speed_angle_queue[1][1] = speed_angle_queue[0][1];
-
-    }
 
   // 초기 2초간 PID 동작 무시 (안정화 시간)
   if (millis() - startTime < 2000) {
@@ -275,7 +289,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
   desiredSpeed_kph = speed_angle_queue[0][0];
   double targetAngle = speed_angle_queue[0][1];
 
-  if (desiredSpeed_kph == 0.0 || targetAngle == 1.0) {
+  if (desiredSpeed_kph == 0.0) {
     setMotor(0, 0);  // 정지
     targetAngle = 1.0;
   } else {
@@ -290,13 +304,13 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
   targetPotValue = getPotFromAngle(targetAngle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
-
-  Serial.print("RPM_Target:"); Serial.print(target_RPM);
-  Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
-  Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
-  Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
-  Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
-  Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
+//
+//  Serial.print("RPM_Target:"); Serial.print(target_RPM);
+//  Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
+//  Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
+//  Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
+//  Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
+//  Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
 
   do { delay(1); } while (toggle_count <= 9);
   toggle_count = 0;
