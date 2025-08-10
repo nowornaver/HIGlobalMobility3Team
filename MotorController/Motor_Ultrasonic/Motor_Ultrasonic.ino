@@ -94,9 +94,11 @@ ISR(USART1_UDRE_vect) {
 void handleManualControl(char cmd) {
   switch (cmd) {
     case 'w': 
-      speed1 = 0.5; break;
+      speed1 = 1; 
+      break;
     case 's': 
-      speed1 = -0.5; break;
+      speed1 = -1; 
+      break;
     case 'a': 
         steeringAngle = max(-16, steeringAngle - 5); 
         break;
@@ -104,7 +106,7 @@ void handleManualControl(char cmd) {
         steeringAngle = min(21, steeringAngle + 5); 
         break;
     case 'x': 
-        speed1 = 0.0; 
+        speed1 = 0; 
         steeringAngle = 0; 
         break;
   }
@@ -225,7 +227,7 @@ void handleGPSData(char data) {
   // 예: 데이터 프로토콜을 따로 설계
 
     steeringAngle = (int8_t)data;
-
+    speed1 = 1;
   // 유효 범위 제한
   if (steeringAngle < -16 || steeringAngle > 21) {
     steeringAngle = 0; // 범위 벗어나면 기본값으로
