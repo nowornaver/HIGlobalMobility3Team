@@ -2,7 +2,7 @@ import serial
 import keyboard
 import time
 
-SERIAL_PORT = 'COM9'
+SERIAL_PORT = 'COM12'
 SERIAL_BAUD = 9600
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 

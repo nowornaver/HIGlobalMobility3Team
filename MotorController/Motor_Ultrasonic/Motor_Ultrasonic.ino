@@ -16,9 +16,18 @@
 #define STEERING_MOTOR_PWM_PIN  8
 #define STEERING_MOTOR_DIR_PIN  9
 #define STEERING_MOTOR_BRK_PIN  10
+
+
+#define TRIG_FRONT 11
+#define ECHO_FRONT 12
+
+
+#define TRIG_REAR 31
+#define ECHO_REAR 30
 enum ControlMode {
   MODE_MANUAL,
-  MODE_GPS
+  MODE_GPS,
+  MODE_Ultrasonic
 };
 
 ControlMode currentMode = MODE_MANUAL;
@@ -77,7 +86,6 @@ volatile double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 ISR(USART1_RX_vect) {
   rxData = UDR1;       // 수신 데이터 읽기
   newDataFlag = true;  // 수신 플래그 설정
-      Serial.println("RX ISR");
 
 }
 
@@ -87,7 +95,6 @@ ISR(USART1_UDRE_vect) {
     UDR1 = txData;    // 데이터 전송
     txReady = true;   // 전송 완료
     UCSR1B &= ~(1 << UDRIE1); // 인터럽트 비활성화
-          Serial.println("TX ISR");
 
   }
 }
@@ -100,10 +107,10 @@ void handleManualControl(char cmd) {
       speed1 = -1; 
       break;
     case 'a': 
-        steeringAngle = max(-16, steeringAngle - 5); 
+    steeringAngle = max(-26, steeringAngle - 5);
         break;
     case 'd': 
-        steeringAngle = min(21, steeringAngle + 5); 
+    steeringAngle = min(26, steeringAngle + 5);
         break;
     case 'x': 
         speed1 = 0; 
@@ -130,11 +137,11 @@ void UART1_init(unsigned long baud) {
 }
 // --- 선형 보간: 목표 각도 → 목표 Pot 값
 int getPotFromAngle(int targetAngle) {
-  const double angle0 = -17.0;
-  const double angle1 = 22.0;
+  const double angle0 = -26.0;
+  const double angle1 = 26.0;
   const int pot0 = 10;
   const int pot1 = 1018;
-  return pot0 + (targetAngle - angle0) * (float)(pot1 - pot0) / (angle1 - angle0);
+return pot0 + (int)(((float)(targetAngle - angle0)) * (float)(pot1 - pot0) / (angle1 - angle0));
 }
 
 // --- 조향 PID (Pot 값 기반)
@@ -229,27 +236,35 @@ void handleGPSData(char data) {
     steeringAngle = (int8_t)data;
     speed1 = 1;
   // 유효 범위 제한
-  if (steeringAngle < -16 || steeringAngle > 21) {
+  if (steeringAngle < -25 || steeringAngle > 25) {
     steeringAngle = 0; // 범위 벗어나면 기본값으로
   }
+}
+
+void handleUltrasonicData (char data) {
+  
 }
 void SensorTask(void *pvParameters) {
   for (;;) {
     // 센서 읽기 코드
-    vTaskDelay(50 / portTICK_PERIOD_MS); // 20Hz 주기
+    vTaskDelay(100 / portTICK_PERIOD_MS); // 20Hz 주기
+      float front = readUltrasonic(TRIG_FRONT, ECHO_FRONT);
+  delay(20); // 간섭 방지
+  float rear  = readUltrasonic(TRIG_REAR,  ECHO_REAR);
+
   }
 }
 
 void ControlTask(void *pvParameters) {
-  int angle = (int)steeringAngle; 
+    Serial.println("CONTROLTASK running");
 
   for (;;) {
        currentPotValue = analogRead(STEERING_ANALOG_PIN);
-  
+    int angle = (int)steeringAngle; 
     // PID 연산, 모터 제어
     vTaskDelay(10 / portTICK_PERIOD_MS); // 100Hz 주기
 
-    if (angle >20 || angle <-15) {
+    if (angle >25 || angle <-25) {
   angle = 0;
 }
     speed_angle_queue[0][0] = speed1;
@@ -271,23 +286,36 @@ void ControlTask(void *pvParameters) {
     motor_pwmValue = calculateDutyCycle(totalOutput);
     setMotor(totalOutput, motor_pwmValue);
   }
-
-  targetPotValue = getPotFromAngle(targetAngle);
+Serial.println(angle);
+  targetPotValue = getPotFromAngle(angle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
-    
+Serial.print(", target: "); Serial.print(targetPotValue);
+Serial.print(", pwm: "); Serial.println(steering_pwmValue);
     
 
      
 
   }
 }
+float readUltrasonic(int trigPin, int echoPin) {
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(30);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000);  // timeout 30ms
+  if (duration == 0) return -1; // timeout
+  float distance = duration * 0.0343 / 2;
+  return round(distance / 10.0) * 10; // 10단위 반올림
+}
+
 
 void CommTask(void *pvParameters) {
+    Serial.println("CommTask running");
+
   for (;;) {
     // UART 수신 처리
-    vTaskDelay(20 / portTICK_PERIOD_MS); // 50Hz 주기
-
+    vTaskDelay(10 / portTICK_PERIOD_MS); // 50Hz 주기
     if (newDataFlag) {
   newDataFlag = false;
       if (rxData == '1') {
@@ -300,6 +328,10 @@ void CommTask(void *pvParameters) {
         Serial.println("GPS mode");
         continue;
       }
+      if (rxData == '3') {
+        currentMode =   MODE_Ultrasonic;
+        Serial.println("  MODE_Ultrasonic");
+      }
 
       // 모드별 처리
       if (currentMode == MODE_MANUAL) {
@@ -308,8 +340,17 @@ void CommTask(void *pvParameters) {
       else if (currentMode == MODE_GPS) {
         handleGPSData(rxData);
       }
+      else if (currentMode ==MODE_Ultrasonic ) {
+        handleUltrasonicData(rxData);
+        
+      }
+      
 
   }
+//  else {
+//          steeringAngle = 0;
+//      speed1 = 0;
+//  }
 }
 }
 // --- Setup
@@ -328,13 +369,23 @@ void setup() {
   pinMode(STEERING_MOTOR_BRK_PIN, OUTPUT);
 
   pinMode(STEERING_ANALOG_PIN, INPUT);
+
+
+  
+  pinMode(TRIG_FRONT, OUTPUT);
+  pinMode(ECHO_FRONT, INPUT);
+
+    pinMode(TRIG_REAR, OUTPUT);
+  pinMode(ECHO_REAR, INPUT);
+
+  
   initEncoders();
   clearEncoderCount();
 
   previous_pos = readEncoder();  // ✅ 초기값 설정
 
-  xTaskCreate(SensorTask, "Sensor", 128, NULL, 2, NULL);
-  xTaskCreate(ControlTask, "Control", 128, NULL, 3, NULL);
+  xTaskCreate(SensorTask, "Sensor", 128, NULL, 1, NULL);
+  xTaskCreate(ControlTask, "Control", 256, NULL, 1, NULL);
   xTaskCreate(CommTask, "Comm", 128, NULL, 1, NULL);
 }
 
