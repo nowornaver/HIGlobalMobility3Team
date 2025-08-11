@@ -42,7 +42,10 @@ typedef struct {
     int speed1;       // -1: 뒤로, 0: 정지, 1: 앞으로
     int angle;    // 조향각 (-26 ~ 26)
 } ManualCommand;
-
+typedef struct {
+  int angle;
+  int speed1;
+} GPSCommand;
 ControlMode currentMode = MODE_MANUAL;
 
 // 타이머
@@ -333,6 +336,31 @@ void ControlTask(void *pvParameters) {
 
   }
 }
+void GPSTask(void *pvParameters) {
+    int gpsAngle = 0;
+    char rxChar;
+
+    for (;;) {
+        // 큐에서 GPS 데이터(조향각 문자)를 1바이트씩 받는다고 가정
+        if (xQueueReceive(gpsQueue, &rxChar, portMAX_DELAY) == pdTRUE) {
+            // 예: 조향각은 -26 ~ 26 사이 정수값으로 시리얼에서 ASCII 숫자 형태로 들어온다고 가정
+            // 실제 구현에 맞게 파싱 수정 필요
+            gpsAngle = rxChar - '0';  // 예: '5' -> 5
+            
+            // 음수 표현 등 필요 시 별도 프로토콜 구현
+            
+            // GPS 조향각 명령 만들기 (속도는 0으로 설정)
+            ManualCommand gpsCmd;
+            gpsCmd.speed1 = 1;   
+            gpsCmd.angle = gpsAngle;
+
+            // controlQueue에 넣기
+            if (xQueueSend(controlQueue, &gpsCmd, 10 / portTICK_PERIOD_MS) != pdPASS) {
+                Serial.println("Warning: controlQueue full, GPS command lost!");
+            }
+        }
+    }
+}
 float readUltrasonic(int trigPin, int echoPin) {
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(30);
@@ -348,6 +376,7 @@ float readUltrasonic(int trigPin, int echoPin) {
 void CommTask(void *pvParameters) {
     Serial.println("CommTask running");
     uint8_t rxData;
+    bool gpsModeActive = false;
 
   for (;;) {
     // UART 수신 처리
@@ -358,15 +387,18 @@ void CommTask(void *pvParameters) {
           Serial.println("Mode: MANUAL");
           continue;
         case 'G': // GPS mode
-          currentMode = MODE_GPS;
+          currentMode = MODE_GPS
+          gpsModeActive = true;
           Serial.println("Mode: GPS");
           continue;
         case 'U': // Ultrasonic mode
           currentMode = MODE_Ultrasonic;
+          gpsModeActive =false;
           Serial.println("Mode: ULTRASONIC");
           continue;
         case 'C': // Camera mode
           currentMode = MODE_Camera;
+          gpsModeActive =false;
           Serial.println("Mode: CAMERA");
           continue;
       }
@@ -377,7 +409,12 @@ void CommTask(void *pvParameters) {
           xQueueSend(manualQueue, &rxData, 20);
           break;
         case MODE_GPS:
-          xQueueSend(gpsQueue, &rxData, 20);
+          if (gpsModeActive) {
+               GPSCommand gpsCmd;
+               gpsCmd.angle = (int8_t)rxData; // signed 1바이트 각도로 가정
+               xQueueSend(gpsQueue, &gpsCmd, 20);          
+                        
+                      }
           break;
         case MODE_Ultrasonic:
           xQueueSend(ultrasonicQueue, &rxData, 20);
@@ -423,16 +460,12 @@ void setup() {
   
   initEncoders();
   clearEncoderCount();
-//QueueHandle_t uartQueue;
-//QueueHandle_t manualQueue;
-//QueueHandle_t gpsQueue;
-//QueueHandle_t ultrasonicQueue;
-//QueueHandle_t cameraQueue;
+
   previous_pos = readEncoder();  // ✅ 초기값 설정
  uartQueue = xQueueCreate(32, sizeof(uint8_t));
 manualQueue = xQueueCreate(10, sizeof(char));  // rxData(char) 넣으니 이렇게
 controlQueue = xQueueCreate(10, sizeof(ManualCommand));
-gpsQueue = xQueueCreate(16, sizeof(uint8_t));
+gpsQueue = xQueueCreate(10, sizeof(GPSCommand));
 ultrasonicQueue = xQueueCreate(16, sizeof(uint8_t));
 cameraQueue = xQueueCreate(16, sizeof(uint8_t));
 
@@ -444,6 +477,7 @@ cameraQueue = xQueueCreate(16, sizeof(uint8_t));
   xTaskCreate(ControlTask, "Control", 256, NULL, 1, NULL);
   xTaskCreate(CommTask, "Comm", 128, NULL, 1, NULL);
     xTaskCreate(ManualTask, "ManualTask", 128, NULL, 1, NULL);
+  xTaskCreate(GPSTask, "GPS", 128, NULL, 1, NULL);  // GPS Task 추가
 
 
   vTaskStartScheduler();
