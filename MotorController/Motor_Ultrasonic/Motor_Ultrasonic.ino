@@ -246,12 +246,24 @@ void handleGPSData(char data) {
   }
 }
 
-void handleUltrasonicData (char data) {
-  for (;;) {
-
-    
+void handleUltrasonicData(char data) {
+  if (data == 'A' || data == 'a') {
+    US_Mode = 'A';            
+    return;
+  }
+  if (data == 'S' || data == 's') {
+    US_Mode = 'S';             
+    return;
+  } if (US_Mode == 'A') {
+    int8_t value = (int8_t)data;
+    if (value < -26 || value > 26) value = 0;
+    steeringAngle = value;
+  } else { 
+    uint8_t value = (uint8_t)data;
+    speed1 = value;           
   }
 }
+
 
 void handleCameraData(char data) {
 
