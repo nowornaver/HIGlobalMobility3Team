@@ -1,5 +1,9 @@
 #include <Arduino_FreeRTOS.h>
 
+#include <Arduino_FreeRTOS.h>
+
+#include <Arduino_FreeRTOS.h>
+
 #include <MsTimer2.h>
 
 // 속도 모터 핀 설정
