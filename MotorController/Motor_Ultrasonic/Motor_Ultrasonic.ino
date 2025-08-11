@@ -31,7 +31,8 @@
 enum ControlMode {
   MODE_MANUAL,
   MODE_GPS,
-  MODE_Ultrasonic
+  MODE_Ultrasonic,
+  MODE_Camera
 };
 
 ControlMode currentMode = MODE_MANUAL;
@@ -246,7 +247,18 @@ void handleGPSData(char data) {
 }
 
 void handleUltrasonicData (char data) {
-  
+  for (;;) {
+
+    
+  }
+}
+
+void handleCameraData(char data) {
+
+  for (;;) {
+    speed1 = (int8_t)data;
+    
+  }
 }
 void SensorTask(void *pvParameters) {
   for (;;) {
@@ -336,6 +348,10 @@ void CommTask(void *pvParameters) {
         currentMode =   MODE_Ultrasonic;
         Serial.println("  MODE_Ultrasonic");
       }
+      if (rxData == '4') {
+        currentMode = MODE_Camera;
+        Serial.println("MODE_Camera");
+      }
 
       // 모드별 처리
       if (currentMode == MODE_MANUAL) {
@@ -346,6 +362,10 @@ void CommTask(void *pvParameters) {
       }
       else if (currentMode ==MODE_Ultrasonic ) {
         handleUltrasonicData(rxData);
+        
+      }
+      else if (currentMode == MODE_Camera) {
+        handleCameraData(rxData);
         
       }
       
