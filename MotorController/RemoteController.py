@@ -1,7 +1,7 @@
 import serial
 import msvcrt
 
-SERIAL_PORT = 'COM9'
+SERIAL_PORT = 'COM19'
 SERIAL_BAUD = 115200
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 

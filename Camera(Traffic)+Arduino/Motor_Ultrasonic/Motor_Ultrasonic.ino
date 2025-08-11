@@ -257,7 +257,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
     }
     else {
       // 알 수 없는 상태면 정지
-      speed_angle_queue[0][0] = 1.0;
+      speed_angle_queue[0][0] = 0.0;
       speed_angle_queue[0][1] = 0.0;
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
