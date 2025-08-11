@@ -237,7 +237,7 @@ void loop() {
 //  }
 
 
-if (flag100ms) {
+// if (flag100ms) {
       flag100ms = false;
 
     if (Serial.available() > 0) {
@@ -262,14 +262,14 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
 
     }
-    else if (receivedState == "STEER_RESET") {
+    else if (receivedState == "REALIGN") {
       speed_angle_queue[0][0] = 0.0;  
       speed_angle_queue[0][1] = receivedAngle;   
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
 
     }
-    else if (receivedState == "FORWARD") {
+    else if (receivedState == "AVOID_FORWARD") {
       speed_angle_queue[0][0] = 0.5;   // 전진 속도 (예)
       speed_angle_queue[0][1] = 0.0;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
@@ -297,7 +297,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
     }
     else {
       // 알 수 없는 상태면 정지
-      speed_angle_queue[0][0] = 0.0;
+      speed_angle_queue[0][0] = 0.5;
       speed_angle_queue[0][1] = 0.0;
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -345,4 +345,4 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
   while (toggle_count <= 9);
   toggle_count = 0;
 }
-}
+// }
