@@ -9,8 +9,10 @@ import serial  # 시리얼 활성화
 SERIAL_PORT, SERIAL_BAUD = 'COM4', 115200
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 time.sleep(2)
-ser.write('C'.encode())
-print("[TX] -> rxData: C")
+print("Sending 'C' mode, then sending numbers repeatedly")
+
+# 먼저 모드 문자 한 번 보내기
+ser.write(b'C')
 
 # 모델 로드
 coco_model = YOLO('yolov8m.pt')
