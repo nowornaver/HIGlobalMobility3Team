@@ -61,7 +61,7 @@ double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 int getPotFromAngle(double targetAngle) {
   const double angle0 = -17.0;
   const double angle1 = 22.0;
-  const int pot0 = 10;
+  const int pot0 = 37;
   const int pot1 = 1018;
   return pot0 + (targetAngle - angle0) * (float)(pot1 - pot0) / (angle1 - angle0);
 }
@@ -216,15 +216,14 @@ void loop() {
   targetPotValue = getPotFromAngle(targetAngle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
-
-  //Serial.print("RPM_Target:"); Serial.print(target_RPM);
-  //Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
-  //Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
-  //Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
-  //Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
-  //Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
+//
+  Serial.print("RPM_Target:"); Serial.print(target_RPM);
+  Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
+  Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
+  Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
+  Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
+  Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
 
   do { delay(1); } while (toggle_count <= 9);
   toggle_count = 0;
 }
-

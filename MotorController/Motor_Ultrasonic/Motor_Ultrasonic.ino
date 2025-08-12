@@ -5,6 +5,7 @@
 #include <Arduino_FreeRTOS.h>
 
 #include <MsTimer2.h>
+#include <queue.h>   // QueueHandle_t, xQueueCreate 등
 
 // 속도 모터 핀 설정
 #define SPEED_MOTOR_FRONT_PWM  5
@@ -24,23 +25,43 @@
 
 #define TRIG_FRONT 11
 #define ECHO_FRONT 12
+#include <stdint.h>
 
 
 #define TRIG_REAR 31
 #define ECHO_REAR 30
+
+QueueHandle_t uartQueue;
+QueueHandle_t manualQueue;
+QueueHandle_t gpsQueue;
+QueueHandle_t ultrasonicQueue;
+QueueHandle_t cameraQueue;
+QueueHandle_t controlQueue;
 enum ControlMode {
   MODE_MANUAL,
   MODE_GPS,
   MODE_Ultrasonic,
   MODE_Camera
 };
+typedef struct {
+    int speed1;       // -1: 뒤로, 0: 정지, 1: 앞으로
+    int angle;    // 조향각 (-26 ~ 26)
+} ManualCommand;
+typedef struct {
+  int angle;
+  int speed1;
+} GPSCommand;
 
+typedef struct {
+  int speed1;
+} CameraCommand;
 ControlMode currentMode = MODE_MANUAL;
 
 // 타이머
+int targetAngle = 0 ;
 int toggle_count = 0;
 //void Interrupt_10ms() { toggle_count++; }
-volatile char rxData;
+//volatile char rxData;
 volatile bool newDataFlag = false;
 volatile bool txReady = true;
 volatile char txData;
@@ -72,9 +93,6 @@ double readings[numReadings] = {0}, total = 0;
 int readIndex = 0;
 //char steeringAngle = 0;  // GPS 에서 받은 조향각
 
-volatile int speed1 = 0;
-volatile int8_t  steeringAngle = 0;  // 조향각 상태 변수 (예: -16 ~ 21 제한)
-
 // 조향 PID 변수 (Pot 기반)
 int currentPotValue = 0, targetPotValue = 0;
 double steering_pwmValue = 0.0;
@@ -89,9 +107,12 @@ volatile double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 
 // UART1 RX 인터럽트
 ISR(USART1_RX_vect) {
-  rxData = UDR1;       // 수신 데이터 읽기
-  newDataFlag = true;  // 수신 플래그 설정
-
+    uint8_t data = UDR1;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xQueueSendFromISR(uartQueue, &data, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR(); // Mega에서는 인자 없음
+    }
 }
 
 // UART1 TX 데이터 레지스터 빈 상태 인터럽트
@@ -104,6 +125,10 @@ ISR(USART1_UDRE_vect) {
   }
 }
 void handleManualControl(char cmd) {
+
+      static int speed1 = 0;
+    static int steeringAngle = 0;
+    ManualCommand manualCmd;
   switch (cmd) {
     case 'w': 
       speed1 = 1; 
@@ -122,6 +147,13 @@ void handleManualControl(char cmd) {
         steeringAngle = 0; 
         break;
   }
+
+      manualCmd.speed1 = speed1;
+    manualCmd.angle = steeringAngle;
+    if (xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS) != pdPASS) {
+        // 큐가 가득 차서 넣기 실패 시 로그 출력 등 처리 가능
+        Serial.println("Warning: manualQueue full, command lost!");
+    }
 }
 // 한 바이트 송신
 void sendByte(char data) {
@@ -237,13 +269,6 @@ void handleGPSData(char data) {
   
   // 여기서 GPS 각도 처리 로직 구현
   // 예: 데이터 프로토콜을 따로 설계
-
-    steeringAngle = (int8_t)data;
-    speed1 = 1;
-  // 유효 범위 제한
-  if (steeringAngle < -25 || steeringAngle > 25) {
-    steeringAngle = 0; // 범위 벗어나면 기본값으로
-  }
 }
 
 void handleUltrasonicData(char data) {
@@ -268,8 +293,16 @@ void handleUltrasonicData(char data) {
 void handleCameraData(char data) {
 
   for (;;) {
-    speed1 = (int8_t)data;
     
+  }
+}
+
+void ManualTask(void *pvParameters) {
+  char rxData;
+  for (;;) {
+    if (xQueueReceive(manualQueue, &rxData, portMAX_DELAY) == pdTRUE) {
+      handleManualControl(rxData);
+    }
   }
 }
 void SensorTask(void *pvParameters) {
@@ -282,30 +315,54 @@ void SensorTask(void *pvParameters) {
 
   }
 }
+void CAMERATask(void *pvParameters) { 
+    int cameraSpeed;
 
+      ManualCommand manualCmd;     // controlQueue에 넣는 데이터
+  Serial.println("Camera Task Running");
+
+  for (;;) {
+    // 카메라 상위 제어기에서 speed 값 받기
+    if (xQueueReceive(cameraQueue, &cameraSpeed, portMAX_DELAY) == pdTRUE) {
+            Serial.println(cameraSpeed);  // 받은 값 그대로 출력
+            manualCmd.speed1 = cameraSpeed; 
+            manualCmd.angle = 0;  // 카메라는 각도 명령 안 줌
+      // controlQueue로 전달
+      if (xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS) != pdPASS) {
+        Serial.println("Warning: controlQueue full, Camera command lost!");
+      }
+    }
+  }
+}
 void ControlTask(void *pvParameters) {
+      ManualCommand cmd;
+
     Serial.println("CONTROLTASK running");
 
   for (;;) {
-       currentPotValue = analogRead(STEERING_ANALOG_PIN);
-    int angle = (int)steeringAngle; 
-    // PID 연산, 모터 제어
-    vTaskDelay(10 / portTICK_PERIOD_MS); // 100Hz 주기
 
-    if (angle >25 || angle <-25) {
-  angle = 0;
+    // PID 연산, 모터 제어
+           currentPotValue = analogRead(STEERING_ANALOG_PIN);
+
+ if (xQueueReceive(controlQueue, &cmd,  10 / portTICK_PERIOD_MS) == pdTRUE) {
+    if (cmd.angle >25 || cmd.angle <-25) {
+  cmd.angle = 0;
 }
-    speed_angle_queue[0][0] = speed1;
-    speed_angle_queue[0][1] = angle;
-    speed_angle_queue[1][0] = speed1;
-    speed_angle_queue[1][1] = angle;
-    
+    speed_angle_queue[0][0] = cmd.speed1;
+    speed_angle_queue[0][1] = cmd.angle;
+
+ }
+     speed_angle_queue[1][0] = cmd.speed1;
+    speed_angle_queue[1][1] = cmd.angle;
   desiredSpeed_kph = speed_angle_queue[0][0];
-  int targetAngle = speed_angle_queue[0][1];
+  targetAngle = speed_angle_queue[0][1];
+  Serial.println(cmd.speed1);
+//Serial.println(cmd.speed1);
+
 
   if (desiredSpeed_kph == 0.0) {
     setMotor(0, 0);  // 정지
-    targetAngle = 1.0;
+    cmd.angle = 1.0;
   } else {
     desiredSpeed_mps = desiredSpeed_kph / 3.6;
     target_RPM = (desiredSpeed_mps * 60.0) / (2 * MY_PI * WHEEL_RADIUS);
@@ -313,18 +370,57 @@ void ControlTask(void *pvParameters) {
     totalOutput = computePID(Current_RPM, target_RPM, Kp_speed, Ki_speed, Kd_speed);
     motor_pwmValue = calculateDutyCycle(totalOutput);
     setMotor(totalOutput, motor_pwmValue);
-  }
-Serial.println(angle);
-  targetPotValue = getPotFromAngle(angle);
+    
+  }    
+     targetPotValue = getPotFromAngle(targetAngle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
-Serial.print(", target: "); Serial.print(targetPotValue);
-Serial.print(", pwm: "); Serial.println(steering_pwmValue);
+//Serial.print("Cmd Angle: ");
+//Serial.println(targetAngle);
+//Serial.print("TargetPotValue: ");
+//Serial.println(targetPotValue);
+//Serial.print("currentPotValue");
+//Serial.println(currentPotValue);
+//Serial.print("Steering PWM: ");
+//Serial.println(steering_pwmValue);
+
     
 
-     
+         vTaskDelay(10 / portTICK_PERIOD_MS); // 100Hz 주기
+
 
   }
+}
+void GPSTask(void *pvParameters) {
+    int gpsAngle = 0;
+    char rxChar;
+    GPSCommand gpsCmd;
+    ManualCommand manualCmd;     // controlQueue에 넣는 데이터
+
+    for (;;) {
+        // 큐에서 GPS 데이터(조향각 문자)를 1바이트씩 받는다고 가정
+        if (xQueueReceive(gpsQueue, &gpsCmd, portMAX_DELAY) == pdTRUE) {
+            // 예: 조향각은 -26 ~ 26 사이 정수값으로 시리얼에서 ASCII 숫자 형태로 들어온다고 가정
+            // 실제 구현에 맞게 파싱 수정 필요
+            Serial.print("[GPS MODE] Received angle: ");
+                           Serial.println(gpsCmd.angle);
+
+            
+//            Serial.println(gpsCmd.angle);
+            // 음수 표현 등 필요 시 별도 프로토콜 구현
+            
+            // GPS 조향각 명령 만들기 (속도는 0으로 설정)
+         manualCmd.speed1 = 0;  // 속도 0 (필요에 따라 조절)
+         manualCmd.angle = gpsCmd.angle;
+         Serial.println(manualCmd.angle);
+        
+
+            // controlQueue에 넣기
+            if (xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS) != pdPASS) {
+                Serial.println("Warning: controlQueue full, GPS command lost!");
+            }
+        }
+    }
 }
 float readUltrasonic(int trigPin, int echoPin) {
   digitalWrite(trigPin, HIGH);
@@ -340,45 +436,67 @@ float readUltrasonic(int trigPin, int echoPin) {
 
 void CommTask(void *pvParameters) {
     Serial.println("CommTask running");
-
+    uint8_t rxData;
+    bool gpsModeActive = false;
+    static char gpsBuffer[8];  // angle 입력 버퍼
+    static uint8_t gpsIndex = 0;
   for (;;) {
     // UART 수신 처리
-    vTaskDelay(10 / portTICK_PERIOD_MS); // 50Hz 주기
-    if (newDataFlag) {
-  newDataFlag = false;
-      if (rxData == '1') {
-        currentMode = MODE_MANUAL;
-        Serial.println("Manual mode");
-        continue;
-      }
-      if (rxData == '2') {
-        currentMode = MODE_GPS;
-        Serial.println("GPS mode");
-        continue;
-      }
-      if (rxData == '3') {
-        currentMode =   MODE_Ultrasonic;
-        Serial.println("  MODE_Ultrasonic");
-      }
-      if (rxData == '4') {
-        currentMode = MODE_Camera;
-        Serial.println("MODE_Camera");
+    if (xQueueReceive(uartQueue, &rxData, portMAX_DELAY) == pdTRUE) {
+      switch (rxData) {
+        case 'K': // Manual mode
+          currentMode = MODE_MANUAL;
+          Serial.println("Mode: MANUAL");
+          continue;
+        case 'G': // GPS mode
+          currentMode = MODE_GPS;
+          gpsModeActive = true;
+          Serial.println("Mode: GPS");
+          continue;
+        case 'U': // Ultrasonic mode
+          currentMode = MODE_Ultrasonic;
+          gpsModeActive =false;
+          Serial.println("Mode: ULTRASONIC");
+          continue;
+        case 'C': // Camera mode
+          currentMode = MODE_Camera;
+          gpsModeActive =false;
+          Serial.println("Mode: CAMERA");
+          continue;
       }
 
       // 모드별 처리
-      if (currentMode == MODE_MANUAL) {
-        handleManualControl(rxData);
-      }
-      else if (currentMode == MODE_GPS) {
-        handleGPSData(rxData);
-      }
-      else if (currentMode ==MODE_Ultrasonic ) {
-        handleUltrasonicData(rxData);
-        
-      }
-      else if (currentMode == MODE_Camera) {
-        handleCameraData(rxData);
-        
+      switch (currentMode) {
+        case MODE_MANUAL:
+          xQueueSend(manualQueue, &rxData, 20);
+          break;
+        case MODE_GPS:
+          if (gpsModeActive) {
+                        if (rxData == '\r' || rxData == '\n') {
+                            // 문자열 → 정수 변환
+                            gpsBuffer[gpsIndex] = '\0';
+                            GPSCommand gpsCmd;
+                            gpsCmd.angle = atoi(gpsBuffer);
+                            Serial.print("[GPS MODE] Parsed angle: ");
+                            Serial.println(gpsCmd.angle);
+                            xQueueSend(gpsQueue, &gpsCmd, 20);
+                            gpsIndex = 0; // 버퍼 리셋
+                        } else {
+                            if (gpsIndex < sizeof(gpsBuffer) - 1) {
+                                gpsBuffer[gpsIndex++] = rxData;
+                            }
+                        }    
+                        
+                      }
+          break;
+        case MODE_Ultrasonic:
+          xQueueSend(ultrasonicQueue, &rxData, 20);
+          break;
+        case MODE_Camera:
+            if (rxData >= '0' && rxData <= '9') {
+            int val = rxData - '0';  // '1' -> 1
+             xQueueSend(cameraQueue, &val, 20);
+  }          break;
       }
       
 
@@ -419,10 +537,27 @@ void setup() {
   clearEncoderCount();
 
   previous_pos = readEncoder();  // ✅ 초기값 설정
+ uartQueue = xQueueCreate(32, sizeof(uint8_t));
+manualQueue = xQueueCreate(10, sizeof(char));  // rxData(char) 넣으니 이렇게
+controlQueue = xQueueCreate(10, sizeof(ManualCommand));
+gpsQueue = xQueueCreate(10, sizeof(GPSCommand));
+ultrasonicQueue = xQueueCreate(16, sizeof(uint8_t));
+cameraQueue = xQueueCreate(5, sizeof(int));
 
+  if (!uartQueue || !manualQueue || !gpsQueue || !ultrasonicQueue || !cameraQueue) {
+    Serial.println("Queue creation failed!");
+    while (1);
+  }
   xTaskCreate(SensorTask, "Sensor", 128, NULL, 1, NULL);
   xTaskCreate(ControlTask, "Control", 256, NULL, 1, NULL);
   xTaskCreate(CommTask, "Comm", 128, NULL, 1, NULL);
+    xTaskCreate(ManualTask, "ManualTask", 128, NULL, 1, NULL);
+  xTaskCreate(GPSTask, "GPS", 128, NULL, 1, NULL);  // GPS Task 추가
+
+  xTaskCreate(CAMERATask, "Camera", 128, NULL, 1, NULL);  // GPS Task 추가
+
+  vTaskStartScheduler();
+
 }
 
 // --- Main Loop
