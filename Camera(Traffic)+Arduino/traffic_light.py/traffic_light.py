@@ -5,18 +5,18 @@ import numpy as np
 import time
 import serial  # 시리얼 활성화
 
-# 아두이노 시리얼 설정
-SERIAL_PORT, SERIAL_BAUD = 'COM4', 115200
+# # 아두이노 시리얼 설정
+SERIAL_PORT, SERIAL_BAUD = 'COM7', 9600
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 time.sleep(2)
 print("Sending 'C' mode, then sending numbers repeatedly")
 
 # 먼저 모드 문자 한 번 보내기
 ser.write(b'C')
-
+time.sleep(0.3)
 # 모델 로드
 coco_model = YOLO('yolov8m.pt')
-my_model   = YOLO(r"C:\\Users\\원수민\\HIGlobalMobility3Team12\\Camera(Traffic)+Arduino\\weights\\best.pt")
+my_model   = YOLO(r"C:\\Users\\원수민\\HIGlobalMobility3Team\\Camera(Traffic)+Arduino\\weights\\best.pt")
 COCO_ID, MY_ID = 9, 0
 
 # 신호등 색상 판별 함수
@@ -121,12 +121,18 @@ with dai.Device(pipeline) as device:
 
                     # 신호 전송 조건 (문자열 사용)
                     if status in ['traffic_red','traffic_yellow'] and conf >= 0.6:
-                        signal_to_send = '0'
-                    elif status == 'traffic_green' and conf >= 0.6:
-                        signal_to_send = '1'
+
+                        signal_to_send = b'0'
+                        ser.write(b'0')  
+                    
+                    else :
+                        ser.write(b'1')  
+
+                        
 
                     if signal_to_send is not None:
-                        ser.write(signal_to_send.encode())  # ← 문자열 + encode
+                        # ser.write(b'1')  
+
                         print(f"아두이노 전송: {signal_to_send}")
                         break
                 if signal_to_send is not None:
