@@ -53,6 +53,51 @@ typedef struct {
 } CameraCommand;
 ControlMode currentMode = MODE_MANUAL;
 
+
+
+
+
+
+
+
+// ---------------- Control params (현장 튜닝) ----------------
+const float MAX_ANGLE   = 20.0f;   // 최댓 조향각 [deg]
+const float D_CURB      = 100.0f;  // 오른쪽(연석) 목표거리 [cm]
+const float D_OBS       = 120.0f;  // 전방(장애물) 목표거리 [cm]
+
+const float OBS_ENTER   = 160.0f;  // 전방 가까우면 장애물 가중치↑
+const float OBS_EXIT    = 200.0f;  // 전방 멀어지면 장애물 가중치↓
+
+const float KP_CURB     = 0.22f;   // 우측 거리 P 게인
+const float KD_CURB     = 0.00f;   // 필요시 0.05~0.10
+const float KP_OBS      = 0.25f;   // 전방 거리 P 게인
+const float KD_OBS      = 0.00f;
+
+const float ANG_SLEW    = 4.0f;    // 프레임당 최대 각 변화량 [deg]
+
+// 센서 유효 범위(모델 스펙)
+const float MIN_VALID_CM = 20.0f;
+const float MAX_VALID_CM = 600.0f;
+
+// ---- SR 데드밴드 (연석 거리 유지 무시 구간) ----
+const float SR_DEADBAND_MIN = 100.0f;  // cm
+const float SR_DEADBAND_MAX = 150.0f;  // cm
+
+// ---- 속도 로직 ----
+const float FRONT_STOP_DIST = 100.0f;  // 전방 <= 이 값이면 정지
+const float VEL_CRUISE      = 1.0f;    // 기본 주행 속도(임의 단위), 모터 연동시 매핑
+
+unsigned long startTime;
+
+// --- 내부 상태/출력 ---
+volatile float steeringTargetDeg = 0.0f;  // 최종 조향 명령 (deg)
+volatile float speedTarget       = 0.0f;  // 최종 속도 명령 (VEL_CRUISE or 0)
+static float wObs = 0.0f;                 // 장애물 제어 가중치 0..1
+static float prevAng = 0.0f;
+static float prevErrCurb = 0.0f, prevErrObs = 0.0f;
+static unsigned long prevT_us = 0;
+
+
 // 타이머
 int targetAngle = 0 ;
 int toggle_count = 0;
@@ -290,13 +335,80 @@ void ManualTask(void *pvParameters) {
   }
 }
 void SensorTask(void *pvParameters) {
-  for (;;) {
-    // 센서 읽기 코드
-      float front = readUltrasonic(TRIG_FRONT, ECHO_FRONT);
-  delay(20); // 간섭 방지
-  float rear  = readUltrasonic(TRIG_REAR,  ECHO_REAR);
-    vTaskDelay(100 / portTICK_PERIOD_MS); // 20Hz 주기
+  static float wObs_local = 0.0f;
+  static float prevErrCurb_local = 0.0f, prevErrObs_local = 0.0f;
+  static float prevAng_local = 0.0f;
+  static unsigned long prevT_us_local = 0;
 
+  prevT_us_local = micros();
+
+  for (;;) {
+    float front = readUltrasonic(TRIG_FRONT, ECHO_FRONT);
+    delay(20); // 간섭 방지
+    float right = readUltrasonic(TRIG_REAR, ECHO_REAR);
+//  Serial.println(front);
+//  Serial.println(right);
+    // 유효범위 필터링
+    if (front < MIN_VALID_CM || front > MAX_VALID_CM) front = -1;
+    if (right < MIN_VALID_CM || right > MAX_VALID_CM) right = -1;
+
+    if (front >= 0 && right >= 0) {
+      unsigned long now_us = micros();
+      float dt = (now_us - prevT_us_local) * 1e-6f;
+      if (dt < 1e-3f) dt = 1e-3f;
+      prevT_us_local = now_us;
+
+      // 장애물 가중치 업데이트
+      if (front < 0) {
+        // 무효면 유지
+      } else if (front < OBS_ENTER) {
+        float x = (OBS_ENTER - front) / OBS_ENTER;
+        wObs_local = slew(wObs_local, clampf(x, 0.0f, 1.0f), 0.10f);
+      } else if (front > OBS_EXIT) {
+        wObs_local = slew(wObs_local, 0.0f, 0.10f);
+      }
+
+      // 연석 유지 각도
+      float angCurb = 0.0f;
+      if (right >= SR_DEADBAND_MIN && right <= SR_DEADBAND_MAX) {
+        angCurb = 0.0f;
+        prevErrCurb_local = 0.0f;
+      } else {
+        float eCurb = right - D_CURB;
+        float dCurb = (eCurb - prevErrCurb_local) / dt;
+        angCurb = KP_CURB * eCurb + KD_CURB * dCurb;
+        prevErrCurb_local = eCurb;
+      }
+
+      // 장애물 유지 각도
+      float eObs = front - D_OBS;
+      float dObs = (eObs - prevErrObs_local) / dt;
+      float angObs = KP_OBS * eObs + KD_OBS * dObs;
+      prevErrObs_local = eObs;
+
+      // 블렌딩 및 제한, 슬루
+      float angTgt = (1.0f - wObs_local) * angCurb + wObs_local * angObs;
+      angTgt = clampf(angTgt, -MAX_ANGLE, MAX_ANGLE);
+      float steerCmd = slew(prevAng_local, angTgt, ANG_SLEW);
+      steerCmd = round(steerCmd);
+      prevAng_local = steerCmd;
+
+      // 속도 결정
+      float velCmd = VEL_CRUISE;
+      if (front <= FRONT_STOP_DIST) {
+        velCmd = 0.0f;
+      }
+
+      // 큐로 제어 명령 전송
+      ManualCommand cmd;
+      cmd.speed1 = (velCmd > 0) ? 1 : 0;   // 간단하게 1 또는 0으로 변환
+      cmd.angle = (int)steerCmd;
+
+      // controlQueue에 보내기 (실패 시 무시)
+      xQueueSend(controlQueue, &cmd, 10 / portTICK_PERIOD_MS);
+    }
+
+    vTaskDelay(10 / portTICK_PERIOD_MS);  // 10Hz 주기
   }
 }
 void CAMERATask(void *pvParameters) { 
@@ -340,7 +452,7 @@ void ControlTask(void *pvParameters) {
     speed_angle_queue[1][1] = cmd.angle;
   desiredSpeed_kph = speed_angle_queue[0][0];
   targetAngle = speed_angle_queue[0][1];
-  // Serial.println(cmd.speed1);
+   Serial.println(cmd.speed1);
 //Serial.println(cmd.speed1);
 
 
@@ -416,7 +528,30 @@ float readUltrasonic(int trigPin, int echoPin) {
   float distance = duration * 0.0343 / 2;
   return round(distance / 10.0) * 10; // 10단위 반올림
 }
+static inline float clampf(float x, float a, float b){
+  return x < a ? a : (x > b ? b : x);
+}
+static inline float slew(float prev, float tgt, float step){
+  float d = tgt - prev;
+  if (d >  step) d =  step;
+  if (d < -step) d = -step;
+  return prev + d;
+}
 
+void updateObsWeight(float fc){
+  float tgt;
+  if (fc < 0) {
+    tgt = wObs; // 무효면 유지
+  } else if (fc < OBS_ENTER) {
+    float x = (OBS_ENTER - fc) / OBS_ENTER;   // 가까울수록 0→1
+    tgt = clampf(x, 0.0f, 1.0f);
+  } else if (fc > OBS_EXIT) {
+    tgt = 0.0f;
+  } else {
+    tgt = wObs; // 중간 구간 유지
+  }
+  wObs = slew(wObs, tgt, 0.10f);
+}
 
 void CommTask(void *pvParameters) {
     Serial.println("CommTask running");
