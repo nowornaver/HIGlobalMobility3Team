@@ -51,6 +51,13 @@ typedef struct {
 typedef struct {
   int speed1;
 } CameraCommand;
+
+
+
+typedef struct {
+  int speed1;
+  int angle;
+} UltrasonicCommand;
 ControlMode currentMode = MODE_MANUAL;
 
 
@@ -104,6 +111,9 @@ int toggle_count = 0;
 //void Interrupt_10ms() { toggle_count++; }
 //volatile char rxData;
 volatile bool newDataFlag = false;
+//초음파 거리값
+volatile int latestUltrasonicDistance = 0;
+
 volatile bool txReady = true;
 volatile char txData;
 // 구동 PID 변수
@@ -325,6 +335,40 @@ void handleCameraData(char data) {
     
   }
 }
+float readUltrasonic(int trigPin, int echoPin) {
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(30);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000);  // timeout 30ms
+  if (duration == 0) return -1; // timeout
+  float distance = duration * 0.0343 / 2;
+  return round(distance / 10.0) * 10; // 10단위 반올림
+}
+static inline float clampf(float x, float a, float b){
+  return x < a ? a : (x > b ? b : x);
+}
+static inline float slew(float prev, float tgt, float step){
+  float d = tgt - prev;
+  if (d >  step) d =  step;
+  if (d < -step) d = -step;
+  return prev + d;
+}
+
+void updateObsWeight(float fc){
+  float tgt;
+  if (fc < 0) {
+    tgt = wObs; // 무효면 유지
+  } else if (fc < OBS_ENTER) {
+    float x = (OBS_ENTER - fc) / OBS_ENTER;   // 가까울수록 0→1
+    tgt = clampf(x, 0.0f, 1.0f);
+  } else if (fc > OBS_EXIT) {
+    tgt = 0.0f;
+  } else {
+    tgt = wObs; // 중간 구간 유지
+  }
+  wObs = slew(wObs, tgt, 0.10f);
+}
 
 void ManualTask(void *pvParameters) {
   char rxData;
@@ -334,83 +378,38 @@ void ManualTask(void *pvParameters) {
     }
   }
 }
-void SensorTask(void *pvParameters) {
-  static float wObs_local = 0.0f;
-  static float prevErrCurb_local = 0.0f, prevErrObs_local = 0.0f;
-  static float prevAng_local = 0.0f;
-  static unsigned long prevT_us_local = 0;
+void SensorTask(void *pvParameters) { //초음파
+UltrasonicCommand ultraCommand = {0,0};
+ManualCommand manualCmd;     // controlQueue에 넣는 데이터
 
-  prevT_us_local = micros();
+    for (;;) {
+        latestUltrasonicDistance = readUltrasonic(TRIG_FRONT,ECHO_FRONT); // 센서 읽기
+            if (xQueueReceive(ultrasonicQueue, &ultraCommand, portMAX_DELAY) == pdTRUE) {
+                    Serial.print("[Ultrasoni] Received speed: ");
+                    Serial.println(ultraCommand.speed1);
+                    manualCmd.speed1=ultraCommand.speed1;
+                    manualCmd.angle=ultraCommand.angle;
+                  xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+                    
 
-  for (;;) {
-    float front = readUltrasonic(TRIG_FRONT, ECHO_FRONT);
-    delay(20); // 간섭 방지
-    float right = readUltrasonic(TRIG_REAR, ECHO_REAR);
-//  Serial.println(front);
-//  Serial.println(right);
-    // 유효범위 필터링
-    if (front < MIN_VALID_CM || front > MAX_VALID_CM) front = -1;
-    if (right < MIN_VALID_CM || right > MAX_VALID_CM) right = -1;
 
-    if (front >= 0 && right >= 0) {
-      unsigned long now_us = micros();
-      float dt = (now_us - prevT_us_local) * 1e-6f;
-      if (dt < 1e-3f) dt = 1e-3f;
-      prevT_us_local = now_us;
-
-      // 장애물 가중치 업데이트
-      if (front < 0) {
-        // 무효면 유지
-      } else if (front < OBS_ENTER) {
-        float x = (OBS_ENTER - front) / OBS_ENTER;
-        wObs_local = slew(wObs_local, clampf(x, 0.0f, 1.0f), 0.10f);
-      } else if (front > OBS_EXIT) {
-        wObs_local = slew(wObs_local, 0.0f, 0.10f);
-      }
-
-      // 연석 유지 각도
-      float angCurb = 0.0f;
-      if (right >= SR_DEADBAND_MIN && right <= SR_DEADBAND_MAX) {
-        angCurb = 0.0f;
-        prevErrCurb_local = 0.0f;
-      } else {
-        float eCurb = right - D_CURB;
-        float dCurb = (eCurb - prevErrCurb_local) / dt;
-        angCurb = KP_CURB * eCurb + KD_CURB * dCurb;
-        prevErrCurb_local = eCurb;
-      }
-
-      // 장애물 유지 각도
-      float eObs = front - D_OBS;
-      float dObs = (eObs - prevErrObs_local) / dt;
-      float angObs = KP_OBS * eObs + KD_OBS * dObs;
-      prevErrObs_local = eObs;
-
-      // 블렌딩 및 제한, 슬루
-      float angTgt = (1.0f - wObs_local) * angCurb + wObs_local * angObs;
-      angTgt = clampf(angTgt, -MAX_ANGLE, MAX_ANGLE);
-      float steerCmd = slew(prevAng_local, angTgt, ANG_SLEW);
-      steerCmd = round(steerCmd);
-      prevAng_local = steerCmd;
-
-      // 속도 결정
-      float velCmd = VEL_CRUISE;
-      if (front <= FRONT_STOP_DIST) {
-        velCmd = 0.0f;
-      }
-
-      // 큐로 제어 명령 전송
-      ManualCommand cmd;
-      cmd.speed1 = (velCmd > 0) ? 1 : 0;   // 간단하게 1 또는 0으로 변환
-      cmd.angle = (int)steerCmd;
-
-      // controlQueue에 보내기 (실패 시 무시)
-      xQueueSend(controlQueue, &cmd, 10 / portTICK_PERIOD_MS);
     }
 
-    vTaskDelay(10 / portTICK_PERIOD_MS);  // 10Hz 주기
-  }
+
+     if (latestUltrasonicDistance < 500) {
+        manualCmd.speed1 = 0;
+        manualCmd.angle  = 0;
+        xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+    }
+    
+    
+    
+    }
+
+            vTaskDelay(pdMS_TO_TICKS(50)); // 20Hz 주기
+
 }
+
 void CAMERATask(void *pvParameters) { 
     int cameraSpeed;
     // Serial.println(cameraSpeed);
@@ -452,9 +451,8 @@ void ControlTask(void *pvParameters) {
     speed_angle_queue[1][1] = cmd.angle;
   desiredSpeed_kph = speed_angle_queue[0][0];
   targetAngle = speed_angle_queue[0][1];
-   Serial.println(cmd.speed1);
+//   Serial.println(cmd.speed1);
 //Serial.println(cmd.speed1);
-
 
   if (desiredSpeed_kph == 0.0) {
     setMotor(0, 0);  // 정지
@@ -518,45 +516,15 @@ void GPSTask(void *pvParameters) {
         }
     }
 }
-float readUltrasonic(int trigPin, int echoPin) {
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(30);
-  digitalWrite(trigPin, LOW);
 
-  long duration = pulseIn(echoPin, HIGH, 30000);  // timeout 30ms
-  if (duration == 0) return -1; // timeout
-  float distance = duration * 0.0343 / 2;
-  return round(distance / 10.0) * 10; // 10단위 반올림
-}
-static inline float clampf(float x, float a, float b){
-  return x < a ? a : (x > b ? b : x);
-}
-static inline float slew(float prev, float tgt, float step){
-  float d = tgt - prev;
-  if (d >  step) d =  step;
-  if (d < -step) d = -step;
-  return prev + d;
-}
-
-void updateObsWeight(float fc){
-  float tgt;
-  if (fc < 0) {
-    tgt = wObs; // 무효면 유지
-  } else if (fc < OBS_ENTER) {
-    float x = (OBS_ENTER - fc) / OBS_ENTER;   // 가까울수록 0→1
-    tgt = clampf(x, 0.0f, 1.0f);
-  } else if (fc > OBS_EXIT) {
-    tgt = 0.0f;
-  } else {
-    tgt = wObs; // 중간 구간 유지
-  }
-  wObs = slew(wObs, tgt, 0.10f);
-}
 
 void CommTask(void *pvParameters) {
     Serial.println("CommTask running");
     uint8_t rxData;
     bool gpsModeActive = false;
+    bool UltrasonicActive = false;
+    bool CameraModeActive = false;
+    
     static char gpsBuffer[8];  // angle 입력 버퍼
     static uint8_t gpsIndex = 0;
   for (;;) {
@@ -570,16 +538,22 @@ void CommTask(void *pvParameters) {
         case 'G': // GPS mode
           currentMode = MODE_GPS;
           gpsModeActive = true;
+          UltrasonicActive=false;
+          CameraModeActive=false;
           Serial.println("Mode: GPS");
           continue;
         case 'U': // Ultrasonic mode
           currentMode = MODE_Ultrasonic;
           gpsModeActive =false;
+          UltrasonicActive=true;
+          CameraModeActive=false;
           Serial.println("Mode: ULTRASONIC");
           continue;
         case 'C': // Camera mode
           currentMode = MODE_Camera;
           gpsModeActive =false;
+          UltrasonicActive=false;
+          CameraModeActive=true;
           Serial.println("Mode: CAMERA");
           continue;
       }
@@ -609,7 +583,15 @@ void CommTask(void *pvParameters) {
                       }
           break;
         case MODE_Ultrasonic:
-          xQueueSend(ultrasonicQueue, &rxData, 20);
+        if (UltrasonicActive) {
+          UltrasonicCommand ultraCommand ;
+          if (latestUltrasonicDistance <500) {
+            ultraCommand.speed1 =0;
+            xQueueSend(ultrasonicQueue, &ultraCommand, 20);
+
+          }
+          
+        }
           break;
         case MODE_Camera:
             if (rxData >= '0' && rxData <= '9') {
@@ -660,8 +642,8 @@ void setup() {
 manualQueue = xQueueCreate(10, sizeof(char));  // rxData(char) 넣으니 이렇게
 controlQueue = xQueueCreate(10, sizeof(ManualCommand));
 gpsQueue = xQueueCreate(10, sizeof(GPSCommand));
-ultrasonicQueue = xQueueCreate(16, sizeof(uint8_t));
-cameraQueue = xQueueCreate(5, sizeof(int));
+ultrasonicQueue = xQueueCreate(10, sizeof(uint8_t));
+cameraQueue = xQueueCreate(10, sizeof(int));
 
   if (!uartQueue || !manualQueue || !gpsQueue || !ultrasonicQueue || !cameraQueue) {
     Serial.println("Queue creation failed!");
