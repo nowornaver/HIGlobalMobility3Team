@@ -12,5 +12,5 @@ ser.write(b'G')
 
 while True:
     # 예: 숫자 '1' 문자 계속 보내기 (아두이노에서 '1' 문자 받음)
-    ser.write(b'1')  
+    ser.write(b'10')  
     time.sleep(0.1)
