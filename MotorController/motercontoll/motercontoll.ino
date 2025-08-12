@@ -216,15 +216,14 @@ void loop() {
   targetPotValue = getPotFromAngle(targetAngle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
-
-  //Serial.print("RPM_Target:"); Serial.print(target_RPM);
-  //Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
-  //Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
-  //Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
-  //Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
-  //Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
+//
+  Serial.print("RPM_Target:"); Serial.print(target_RPM);
+  Serial.print(",RPM_Current:"); Serial.print(Current_RPM);
+  Serial.print(",Motor_PWM:"); Serial.print(motor_pwmValue);
+  Serial.print(",Pot_Target:"); Serial.print(targetPotValue);
+  Serial.print(",Pot_Current:"); Serial.print(currentPotValue);
+  Serial.print(",Steer_PWM:"); Serial.println(steering_pwmValue);
 
   do { delay(1); } while (toggle_count <= 9);
   toggle_count = 0;
 }
-
