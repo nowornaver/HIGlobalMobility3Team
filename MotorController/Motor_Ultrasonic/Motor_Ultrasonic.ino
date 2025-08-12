@@ -292,10 +292,10 @@ void ManualTask(void *pvParameters) {
 void SensorTask(void *pvParameters) {
   for (;;) {
     // 센서 읽기 코드
-    vTaskDelay(100 / portTICK_PERIOD_MS); // 20Hz 주기
       float front = readUltrasonic(TRIG_FRONT, ECHO_FRONT);
   delay(20); // 간섭 방지
   float rear  = readUltrasonic(TRIG_REAR,  ECHO_REAR);
+    vTaskDelay(100 / portTICK_PERIOD_MS); // 20Hz 주기
 
   }
 }
@@ -546,7 +546,7 @@ cameraQueue = xQueueCreate(5, sizeof(int));
 
 // --- Main Loop
 
-void loop() {
 
+void loop() {
 
 }
