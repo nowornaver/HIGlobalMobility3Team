@@ -1,9 +1,5 @@
 #include <Arduino_FreeRTOS.h>
 
-#include <Arduino_FreeRTOS.h>
-
-#include <Arduino_FreeRTOS.h>
-
 #include <MsTimer2.h>
 #include <queue.h>   // QueueHandle_t, xQueueCreate 등
 
@@ -136,10 +132,10 @@ void handleManualControl(char cmd) {
     case 's': 
       speed1 = -1; 
       break;
-    case 'a': 
+    case 'd': 
     steeringAngle = max(-26, steeringAngle - 5);
         break;
-    case 'd': 
+    case 'a': 
     steeringAngle = min(26, steeringAngle + 5);
         break;
     case 'x': 
@@ -271,24 +267,12 @@ void handleGPSData(char data) {
   // 예: 데이터 프로토콜을 따로 설계
 }
 
-void handleUltrasonicData(char data) {
-  if (data == 'A' || data == 'a') {
-    US_Mode = 'A';            
-    return;
-  }
-  if (data == 'S' || data == 's') {
-    US_Mode = 'S';             
-    return;
-  } if (US_Mode == 'A') {
-    int8_t value = (int8_t)data;
-    if (value < -26 || value > 26) value = 0;
-    steeringAngle = value;
-  } else { 
-    uint8_t value = (uint8_t)data;
-    speed1 = value;           
+void handleUltrasonicData (char data) {
+  for (;;) {
+
+    
   }
 }
-
 
 void handleCameraData(char data) {
 
@@ -317,7 +301,7 @@ void SensorTask(void *pvParameters) {
 }
 void CAMERATask(void *pvParameters) { 
     int cameraSpeed;
-
+    // Serial.println(cameraSpeed);
       ManualCommand manualCmd;     // controlQueue에 넣는 데이터
   Serial.println("Camera Task Running");
 
@@ -356,7 +340,7 @@ void ControlTask(void *pvParameters) {
     speed_angle_queue[1][1] = cmd.angle;
   desiredSpeed_kph = speed_angle_queue[0][0];
   targetAngle = speed_angle_queue[0][1];
-  Serial.println(cmd.speed1);
+  // Serial.println(cmd.speed1);
 //Serial.println(cmd.speed1);
 
 
