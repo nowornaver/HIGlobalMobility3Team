@@ -237,7 +237,7 @@ void loop() {
 //  }
 
 
-if (flag100ms) {
+// if (flag100ms) {
       flag100ms = false;
 
     if (Serial.available() > 0) {
@@ -256,7 +256,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
 
        if (receivedState == "REVERSING") {
       // 예: 후진 속도, 각도 설정
-      speed_angle_queue[0][0] = -0.5;  // 후진 속도 (예)
+      speed_angle_queue[0][0] = -3.0;  // 후진 속도 (예)
       speed_angle_queue[0][1] = 0.0;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -270,15 +270,15 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
 
     }
     else if (receivedState == "FORWARD") {
-      speed_angle_queue[0][0] = 0.5;   // 전진 속도 (예)
-      speed_angle_queue[0][1] = 0.0;   // 각도 초기화
+      speed_angle_queue[0][0] = 1.0;   // 전진 속도 (예)
+      speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
 
     }
 
     else if (receivedState == "TURNRIGHT") {
-      speed_angle_queue[0][0] =  0.5;   // 전진 속도 (예)
+      speed_angle_queue[0][0] =  0.0;   // 전진 속도 (예)
       speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -287,7 +287,7 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
 
 
     else if (receivedState == "TURNLEFT") {
-      speed_angle_queue[0][0] =  0.5;   // 전진 속도 (예)
+      speed_angle_queue[0][0] =  0.0;   // 전진 속도 (예)
       speed_angle_queue[0][1] = receivedAngle;   // 각도 초기화
       speed_angle_queue[1][0] = speed_angle_queue[0][0];
       speed_angle_queue[1][1] = speed_angle_queue[0][1];
@@ -305,12 +305,12 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
     }
 
   // 초기 2초간 PID 동작 무시 (안정화 시간)
-  if (millis() - startTime < 2000) {
-    setMotor(0, 0);
-    clearEncoderCount();
-    previous_pos = readEncoder();
-    return;
-  }
+  // if (millis() - startTime < 2000) {
+  //   setMotor(0, 0);
+  //   clearEncoderCount();
+  //   previous_pos = readEncoder();
+  //   return;
+  // }
 
   desiredSpeed_kph = speed_angle_queue[0][0];
   double targetAngle = speed_angle_queue[0][1];
@@ -345,4 +345,4 @@ receivedAngle = input.substring(commaIndex + 1).toFloat();
   while (toggle_count <= 9);
   toggle_count = 0;
 }
-}
+// }
