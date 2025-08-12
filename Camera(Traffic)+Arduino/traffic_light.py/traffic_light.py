@@ -10,7 +10,7 @@ SERIAL_PORT, SERIAL_BAUD = 'COM4', 115200
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 
 # 모델 로드
-coco_model = YOLO('yolov8n.pt')
+coco_model = YOLO('yolov8m.pt')
 my_model   = YOLO(r"C:\\Users\\원수민\\HIGlobalMobility3Team12\\Camera(Traffic)+Arduino\\weights\\best.pt")
 COCO_ID, MY_ID = 9, 0
 
