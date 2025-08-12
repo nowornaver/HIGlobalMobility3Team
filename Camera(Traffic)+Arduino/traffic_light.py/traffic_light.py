@@ -8,6 +8,9 @@ import serial  # 시리얼 활성화
 # 아두이노 시리얼 설정
 SERIAL_PORT, SERIAL_BAUD = 'COM4', 115200
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+time.sleep(2)
+ser.write('C'.encode())
+print("[TX] -> rxData: C")
 
 # 모델 로드
 coco_model = YOLO('yolov8m.pt')
@@ -25,7 +28,7 @@ def get_traffic_light_color(roi):
         cv2.inRange(hsv, (40,50,50), (90,255,255))    # 초록
     ]
     counts = [cv2.countNonZero(m) for m in masks]
-    idx = np.argmax(counts)
+    idx = int(np.argmax(counts))
     status_list = ['traffic_red','traffic_yellow','traffic_green']
     color_list  = [(0,0,255),(0,255,255),(0,255,0)]
     return (status_list[idx], color_list[idx]) if max(counts) > 5 else ('unknown',(255,255,255))
@@ -72,15 +75,22 @@ with dai.Device(pipeline) as device:
 
     while True:
         start = time.time()
-        frame       = q_rgb.get().getCvFrame()
-        depth_frame = q_depth.get().getFrame()
-        h, w = frame.shape[:2]
+        frame_msg = q_rgb.get()
+        if frame_msg is None:
+            continue
+        frame = frame_msg.getCvFrame()
 
+        depth_msg = q_depth.get()
+        if depth_msg is None:
+            continue
+        depth_frame = depth_msg.getFrame()
+
+        h, w = frame.shape[:2]
         boxes = []
         frame_count += 1
 
         if frame_count % interval == 0:
-            signal_to_send = None  # 아두이노로 보낼 값
+            signal_to_send = None  # 문자열 '0' 또는 '1'
 
             for model, tid, prefix in [(coco_model, COCO_ID, ''),(my_model, MY_ID, 'MY_')]:
                 try:
@@ -94,23 +104,27 @@ with dai.Device(pipeline) as device:
                     if cls != tid or conf < 0.6:
                         continue
 
-                    x1,y1,x2,y2 = map(int, b.xyxy[0])
+                    x1, y1, x2, y2 = map(int, b.xyxy[0])
+
+                    # depth index 경계 보정
                     cx, cy = (x1+x2)//2, (y1+y2)//2
-                    dx = int(cx*depth_frame.shape[1]/w)
-                    dy = int(cy*depth_frame.shape[0]/h)
-                    dist = depth_frame[dy,dx].item()/1000
-                    status,color = get_traffic_light_color(frame[y1:y2,x1:x2])
+                    dx = int(np.clip(cx * depth_frame.shape[1] / w, 0, depth_frame.shape[1]-1))
+                    dy = int(np.clip(cy * depth_frame.shape[0] / h, 0, depth_frame.shape[0]-1))
 
-                    boxes.append((x1,y1,x2,y2,color,f"{prefix}{status} {conf:.2f} ({dist:.2f}m)"))
+                    dist = float(depth_frame[dy, dx]) / 1000.0
+                    status, color = get_traffic_light_color(frame[y1:y2, x1:x2])
 
-                    # 신호 전송 조건
+                    label = f"{prefix}{status} {conf:.2f} ({dist:.2f}m)"
+                    boxes.append((x1, y1, x2, y2, color, label))
+
+                    # 신호 전송 조건 (문자열 사용)
                     if status in ['traffic_red','traffic_yellow'] and conf >= 0.6:
                         signal_to_send = '0'
                     elif status == 'traffic_green' and conf >= 0.6:
                         signal_to_send = '1'
 
                     if signal_to_send is not None:
-                        ser.write(signal_to_send.encode())  # 아두이노로 송신
+                        ser.write(signal_to_send.encode())  # ← 문자열 + encode
                         print(f"아두이노 전송: {signal_to_send}")
                         break
                 if signal_to_send is not None:
@@ -120,9 +134,10 @@ with dai.Device(pipeline) as device:
         else:
             boxes = prev_boxes
 
-        for x1,y1,x2,y2,col,label in boxes:
-            cv2.rectangle(frame,(x1,y1),(x2,y2),col,2)
-            cv2.putText(frame,label,(x1,y1-10),cv2.FONT_HERSHEY_SIMPLEX,0.7,col,2)
+        # 박스 렌더
+        for x1, y1, x2, y2, col, label in boxes:
+            cv2.rectangle(frame, (x1, y1), (x2, y2), col, 2)
+            cv2.putText(frame, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, col, 2)
 
         cv2.imshow('OAK-D 신호등 인식', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
