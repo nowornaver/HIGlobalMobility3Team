@@ -6,7 +6,7 @@ import depthai as dai
 # 1) 아두이노 시리얼 설정
 # =========================
 # SERIAL_PORT = 'COM4'      # 환경에 맞게 변경
-# SERIAL_BAUD = 115200
+# SERIAL_BAUD = 9600
 # ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 # time.sleep(2)  # 아두이노 자동 리셋 대기
 
@@ -17,11 +17,11 @@ pipeline = dai.Pipeline()
 
 # -- 좌/우 모노 카메라 (스테레오 깊이 입력용)
 mono_left = pipeline.createMonoCamera()
-mono_left.setBoardSocket(dai.CameraBoardSocket.CAM_B)   # LEFT -> CAM_B (신규 권장)
+mono_left.setBoardSocket(dai.CameraBoardSocket.CAM_B)
 mono_left.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 
 mono_right = pipeline.createMonoCamera()
-mono_right.setBoardSocket(dai.CameraBoardSocket.CAM_C)  # RIGHT -> CAM_C (신규 권장)
+mono_right.setBoardSocket(dai.CameraBoardSocket.CAM_C)
 mono_right.setResolution(dai.MonoCameraProperties.SensorResolution.THE_720_P)
 
 # -- 스테레오 깊이 모듈
@@ -95,4 +95,4 @@ with dai.Device(pipeline) as device:
         pass
     finally:
         # ser.close()
-        print("종료 및 시리얼 닫힘.")
+        print("종료 및 시리얼 닫힘.") 

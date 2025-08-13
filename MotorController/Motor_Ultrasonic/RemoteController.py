@@ -1,30 +1,16 @@
 import serial
-import keyboard
 import time
 
-SERIAL_PORT = 'COM12'
+SERIAL_PORT = 'COM13'
 SERIAL_BAUD = 9600
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 
-print("WASD로 제어, ESC로 종료")
+print("Sending 'C' mode, then sending numbers repeatedly")
+
+# 먼저 모드 문자 한 번 보내기
+ser.write(b'G')
 
 while True:
-    if keyboard.is_pressed('esc'):
-        break
-
-    key_to_send = None
-
-    if keyboard.is_pressed('w'):
-        key_to_send = 'w'
-    elif keyboard.is_pressed('s'):
-        key_to_send = 's'
-    elif keyboard.is_pressed('a'):
-        key_to_send = 'a'
-    elif keyboard.is_pressed('d'):
-        key_to_send = 'd'
-
-    if key_to_send:
-        ser.write(key_to_send.encode('utf-8'))
-        print(f"전송: {key_to_send}")
-
+    # 예: 숫자 '1' 문자 계속 보내기 (아두이노에서 '1' 문자 받음)
+    ser.write(b'10')  
     time.sleep(0.1)
