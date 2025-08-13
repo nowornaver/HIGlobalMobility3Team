@@ -379,42 +379,36 @@ void ManualTask(void *pvParameters) {
   }
 }
 void SensorTask(void *pvParameters) { //초음파
-  
-    UltrasonicCommand ultraCommand = {0,0};
-    ManualCommand manualCmd;     // controlQueue에 넣는 데이터
+UltrasonicCommand ultraCommand = {0,0};
+ManualCommand manualCmd;     // controlQueue에 넣는 데이터
 
     for (;;) {
-      if (currentMode == MODE_Ultrasonic){
-        latestUltrasonicDistance = readUltrasonic(TRIG_FRONT, ECHO_FRONT); // 센서 읽기
-        if (latestUltrasonicDistance < MIN_VALID_CM || latestUltrasonicDistance > MAX_VALID_CM) {
-            latestUltrasonicDistance = -1;
-        }
-
-        // 초음파 데이터가 무효면 바로 다음 루프로 (딜레이 포함)
-        if (latestUltrasonicDistance < 0) {
-            vTaskDelay(pdMS_TO_TICKS(50));
-            continue;
-        }
+        latestUltrasonicDistance = readUltrasonic(TRIG_FRONT,ECHO_FRONT); // 센서 읽기
+            if (xQueueReceive(ultrasonicQueue, &ultraCommand, portMAX_DELAY) == pdTRUE) {
+                    Serial.print("[Ultrasoni] Received speed: ");
+                    Serial.println(ultraCommand.speed1);
+                    manualCmd.speed1=ultraCommand.speed1;
+                    manualCmd.angle=ultraCommand.angle;
+                  xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+                    
 
 
-        // 장애물 가까우면 속도 0 명령 전송
-        if (latestUltrasonicDistance < 100) {
-            manualCmd.speed1 = 0;
-            manualCmd.angle = 0;
-            xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
-        }
-        else {
-            manualCmd.speed1 = 1;
-            manualCmd.angle = 0;
-        }
+    }
 
+
+     if (latestUltrasonicDistance < 500) {
+        manualCmd.speed1 = 0;
+        manualCmd.angle  = 0;
+        xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+    }
+    
+    
+    
     }
 
             vTaskDelay(pdMS_TO_TICKS(50)); // 20Hz 주기
 
-    }
 }
-
 
 void CAMERATask(void *pvParameters) { 
     int cameraSpeed;
