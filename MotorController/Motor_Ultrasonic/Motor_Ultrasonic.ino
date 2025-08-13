@@ -404,7 +404,7 @@ void ControlTask(void *pvParameters) {
     // 속도 제어
     desiredSpeed_kph = speed_angle_queue[0][0];
     targetAngle      = (int)speed_angle_queue[0][1];
-    Serial.println(cmd.speed1);
+    // Serial.println(cmd.speed1);
 
     currentPotValue = analogRead(STEERING_ANALOG_PIN);
 
