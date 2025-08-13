@@ -68,7 +68,7 @@ double readings[numReadings] = {0}, total = 0;
 int readIndex = 0;
 //char steeringAngle = 0;  // GPS 에서 받은 조향각
 
-volatile int speed1 = 0;
+volatile int speed1 = 1;
 volatile int8_t  steeringAngle = 0;  // 조향각 상태 변수 (예: -16 ~ 21 제한)
 
 // 조향 PID 변수 (Pot 기반)
@@ -232,9 +232,138 @@ int calculateDutyCycle(double output) {
 void handleGPSData(char data) {
   
   // 여기서 GPS 각도 처리 로직 구현
+  Serial.println(data);
   // 예: 데이터 프로토콜을 따로 설계
+  // steeringAngle = data;  // 그대로 값 매핑
+// int num = data - '0'; // '3' → 3 변환
 
-    steeringAngle = (int8_t)data;
+switch (data) {
+    case '0':
+    steeringAngle = 0;
+    break;
+
+  case '1':
+    steeringAngle = 1; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '2':
+    steeringAngle = 2; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '3':
+    steeringAngle = 3; // 3일 때는 직진
+    Serial.println(steeringAngle);
+    break;
+  case '4':
+    steeringAngle=4;
+    break;
+  case '5':
+    steeringAngle = 5; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '6':
+    steeringAngle = 6; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '7':
+    steeringAngle = 7; // 3일 때는 직진
+    break;
+  case '8':
+    steeringAngle=8;
+    break;
+      case '9':
+    steeringAngle = 9; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '10':
+    steeringAngle = 10; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '11':
+    steeringAngle = 11; // 3일 때는 직진
+    break;
+  case '12':
+    steeringAngle=12;
+    break;
+
+    case '13':
+    steeringAngle = 13; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '14':
+    steeringAngle = 14; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '15':
+    steeringAngle = 15; // 3일 때는 직진
+    break;
+  case '16':
+    steeringAngle=16;
+    break;
+  case '17':
+    steeringAngle = 17; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '18':
+    steeringAngle = 18; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '19':
+    steeringAngle = 19; // 3일 때는 직진
+    break;
+  case '20':
+    steeringAngle=20;
+    break;
+      case '21':
+    steeringAngle = 21; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '22':
+    steeringAngle = 2; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '23':
+    steeringAngle = 3; // 3일 때는 직진
+    break;
+  case '-1':
+    steeringAngle=-1;
+    break;
+      case '-2':
+    steeringAngle = -2; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '-3':
+    steeringAngle = -3; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '-4':
+    steeringAngle = -4; // 3일 때는 직진
+    break;
+  case '-5':
+    steeringAngle=-5;
+    break;
+  case '-6':
+    steeringAngle = -6; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '-7':
+    steeringAngle = -7; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '-8':
+    steeringAngle = -8; // 3일 때는 직진
+    break;
+  case '-9':
+    steeringAngle=-9;
+    break;
+      case '-10':
+    steeringAngle = -10; // 1일 때는 오른쪽으로 10도 조향
+    break;
+  case '-11':
+    steeringAngle = -11; // 2일 때는 왼쪽으로 10도 조향
+    break;
+  case '-12':
+    steeringAngle = -12; // 3일 때는 직진
+    break;
+  case '-13':
+    steeringAngle=-13;
+    break;
+      case '-14':
+    steeringAngle = -14; // 3일 때는 직진
+    break;
+  case '-15':
+    steeringAngle=-15;
+    break;
+   
+  default:
+  break;
+}
+  // Serial.println(steeringAngle);
+
     speed1 = 1;
   // 유효 범위 제한
   if (steeringAngle < -25 || steeringAngle > 25) {
@@ -273,12 +402,14 @@ void ControlTask(void *pvParameters) {
   for (;;) {
        currentPotValue = analogRead(STEERING_ANALOG_PIN);
     int angle = (int)steeringAngle; 
+    Serial.println(angle);
     // PID 연산, 모터 제어
     vTaskDelay(10 / portTICK_PERIOD_MS); // 100Hz 주기
 
     if (angle >25 || angle <-25) {
   angle = 0;
 }
+// Serial.println(speed1);
     speed_angle_queue[0][0] = speed1;
     speed_angle_queue[0][1] = angle;
     speed_angle_queue[1][0] = speed1;
@@ -298,12 +429,12 @@ void ControlTask(void *pvParameters) {
     motor_pwmValue = calculateDutyCycle(totalOutput);
     setMotor(totalOutput, motor_pwmValue);
   }
-Serial.println(angle);
+// Serial.println(angle);
   targetPotValue = getPotFromAngle(angle);
   calculateSteeringControl_Pot(currentPotValue, targetPotValue);
   controlSteeringMotor(steering_pwmValue);
-Serial.print(", target: "); Serial.print(targetPotValue);
-Serial.print(", pwm: "); Serial.println(steering_pwmValue);
+// Serial.print(", target: "); Serial.print(targetPotValue);
+// Serial.print(", pwm: "); Serial.println(steering_pwmValue);
     
 
      
@@ -330,24 +461,26 @@ void CommTask(void *pvParameters) {
     vTaskDelay(10 / portTICK_PERIOD_MS); // 50Hz 주기
     if (newDataFlag) {
   newDataFlag = false;
-      if (rxData == '1') {
-        currentMode = MODE_MANUAL;
-        Serial.println("Manual mode");
-        continue;
-      }
+      // if (rxData == '1') {
+      //   currentMode = MODE_MANUAL;
+      //   Serial.println("Manual mode");
+      //   continue;
+      // }
       if (rxData == '2') {
         currentMode = MODE_GPS;
         Serial.println("GPS mode");
         continue;
       }
-      if (rxData == '3') {
-        currentMode =   MODE_Ultrasonic;
-        Serial.println("  MODE_Ultrasonic");
-      }
-      if (rxData == '4') {
-        currentMode = MODE_Camera;
-        Serial.println("MODE_Camera");
-      }
+      // if (rxData == '3') {
+      //   currentMode =   MODE_Ultrasonic;
+      //   Serial.println("  MODE_Ultrasonic");
+      //   continue;
+      // }
+      // if (rxData == '4') {
+      //   currentMode = MODE_Camera;
+      //   Serial.println("MODE_Camera");
+      //   continue;
+      // }
 
       // 모드별 처리
       if (currentMode == MODE_MANUAL) {
