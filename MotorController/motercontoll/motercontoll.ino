@@ -61,7 +61,7 @@ double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 int getPotFromAngle(double targetAngle) {
   const double angle0 = -17.0;
   const double angle1 = 22.0;
-  const int pot0 = 37;
+  const int pot0 = 10;
   const int pot1 = 1018;
   return pot0 + (targetAngle - angle0) * (float)(pot1 - pot0) / (angle1 - angle0);
 }
