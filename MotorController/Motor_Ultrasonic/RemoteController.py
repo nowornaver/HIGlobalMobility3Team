@@ -1,7 +1,7 @@
 import serial
 import time
 
-SERIAL_PORT = 'COM13'
+SERIAL_PORT = 'COM7'
 SERIAL_BAUD = 9600
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 
