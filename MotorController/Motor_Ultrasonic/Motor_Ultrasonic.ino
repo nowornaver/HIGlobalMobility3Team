@@ -132,10 +132,10 @@ void handleManualControl(char cmd) {
     case 's': 
       speed1 = -1; 
       break;
-    case 'a': 
+    case 'd': 
     steeringAngle = max(-26, steeringAngle - 5);
         break;
-    case 'd': 
+    case 'a': 
     steeringAngle = min(26, steeringAngle + 5);
         break;
     case 'x': 
@@ -340,7 +340,7 @@ void ControlTask(void *pvParameters) {
     speed_angle_queue[1][1] = cmd.angle;
   desiredSpeed_kph = speed_angle_queue[0][0];
   targetAngle = speed_angle_queue[0][1];
-  Serial.println(cmd.speed1);
+  // Serial.println(cmd.speed1);
 //Serial.println(cmd.speed1);
 
 
