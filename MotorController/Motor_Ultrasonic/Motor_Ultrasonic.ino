@@ -44,10 +44,12 @@ enum ControlMode {
   MODE_Ultrasonic,
   MODE_Camera
 };
+
 typedef struct {
     int speed1;       // -1: 뒤로, 0: 정지, 1: 앞으로
     int angle;    // 조향각 (-26 ~ 26)
 } ManualCommand;
+
 typedef struct {
   int angle;
   int speed1;
@@ -56,8 +58,6 @@ typedef struct {
 typedef struct {
   int speed1;
 } CameraCommand;
-
-
 
 typedef struct {
   int speed1;
@@ -77,8 +77,8 @@ volatile uint32_t tick1ms = 0;
 SemaphoreHandle_t sem10ms;
 SemaphoreHandle_t sem100ms;
 // ---------------- Control params (현장 튜닝) ----------------
-const float MAX_ANGLE   = 20.0f;   // 최댓 조향각 [deg]
-const float D_CURB      = 100.0f;  // 오른쪽(연석) 목표거리 [cm]
+const float MAX_ANGLE   = 20.0f;   // 최대 조향각 [deg]
+const float D_CURB      = 10.0f;  // 오른쪽(연석) 목표거리 [cm]
 const float D_OBS       = 120.0f;  // 전방(장애물) 목표거리 [cm]
 
 const float OBS_ENTER   = 160.0f;  // 전방 가까우면 장애물 가중치↑
@@ -420,32 +420,47 @@ void ManualTask(void *pvParameters) {
 void SensorTask(void *pvParameters) { //초음파
   
     UltrasonicCommand ultraCommand = {0,0};
-    ManualCommand manualCmd;     // controlQueue에 넣는 데이터
-
+    ManualCommand manualCmd = {0,0};     // controlQueue에 넣는 데이터
+    static TickType_t nextAdjustTick = 0;
     for (;;) {
+      Serial.println(latestUltrasonicDistance);
+      Serial.println(manualCmd.angle);
       if (currentMode == MODE_Ultrasonic){
         latestUltrasonicDistance = readUltrasonic(TRIG_FRONT, ECHO_FRONT); // 센서 읽기
         if (latestUltrasonicDistance < MIN_VALID_CM || latestUltrasonicDistance > MAX_VALID_CM) {
             latestUltrasonicDistance = -1;
         }
-
+        TickType_t now = xTaskGetTickCount();
         // 초음파 데이터가 무효면 바로 다음 루프로 (딜레이 포함)
         if (latestUltrasonicDistance < 0) {
             vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
 
+if (now >= nextAdjustTick){if (latestUltrasonicDistance < 130) {
+            manualCmd.speed1 = 0;
+            manualCmd.angle = manualCmd.angle-5;
+            // xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+        }
+        else if (latestUltrasonicDistance > 150) {
+          manualCmd.angle = manualCmd.angle+5;
+        }
 
-        // 장애물 가까우면 속도 0 명령 전송
-        if (latestUltrasonicDistance < 100) {
+        else {
             manualCmd.speed1 = 0;
             manualCmd.angle = 0;
-            xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+
         }
-        else {
-            manualCmd.speed1 = 1;
-            manualCmd.angle = 0;
-        }
+
+      if (manualCmd.angle >  (int)MAX_ANGLE) manualCmd.angle =  (int)MAX_ANGLE;
+      if (manualCmd.angle < -(int)MAX_ANGLE) manualCmd.angle = -(int)MAX_ANGLE;
+      nextAdjustTick = now + pdMS_TO_TICKS(1000);
+      }
+        // 장애물 가까우면 속도 0 명령 전송
+        
+
+                    xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+
 
     }
 
