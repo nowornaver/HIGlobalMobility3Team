@@ -1,4 +1,5 @@
 #include <Arduino_FreeRTOS.h>
+#include <semphr.h>
 
 #include <MsTimer2.h>
 #include <queue.h>   // QueueHandle_t, xQueueCreate 등
@@ -7,6 +8,9 @@
 #define SPEED_MOTOR_FRONT_PWM  5
 #define SPEED_MOTOR_FRONT_DIR  6
 #define SPEED_MOTOR_FRONT_BRK  7
+
+#define LED_PIN_10MS 13   // 내장 LED
+#define OSC_PIN_100MS 8   // 오실로스코프 측정용 핀
 
 // 엔코더 핀 설정
 #define ENCODER_A_PIN 2
@@ -22,6 +26,7 @@
 #define TRIG_FRONT 11
 #define ECHO_FRONT 12
 #include <stdint.h>
+#define LED_PIN 13  // 내장 LED
 
 
 #define TRIG_REAR 31
@@ -66,7 +71,11 @@ ControlMode currentMode = MODE_MANUAL;
 
 
 
+volatile uint32_t tick1ms = 0;
 
+// ======= 주기용 세마포어 =======
+SemaphoreHandle_t sem10ms;
+SemaphoreHandle_t sem100ms;
 // ---------------- Control params (현장 튜닝) ----------------
 const float MAX_ANGLE   = 20.0f;   // 최댓 조향각 [deg]
 const float D_CURB      = 100.0f;  // 오른쪽(연석) 목표거리 [cm]
@@ -174,6 +183,36 @@ ISR(USART1_UDRE_vect) {
     UCSR1B &= ~(1 << UDRIE1); // 인터럽트 비활성화
 
   }
+}
+ISR(TIMER1_COMPA_vect) {
+  tick1ms++;
+
+    BaseType_t xHigherPriorityTaskWoken10 = pdFALSE;
+    BaseType_t xHigherPriorityTaskWoken100 = pdFALSE;
+
+    if (tick1ms % 10 == 0) {
+        xSemaphoreGiveFromISR(sem10ms, &xHigherPriorityTaskWoken10);
+    }
+
+    if (tick1ms % 100 == 0) {
+        xSemaphoreGiveFromISR(sem100ms, &xHigherPriorityTaskWoken100);
+    }
+
+    // 한 번만 호출
+    if (xHigherPriorityTaskWoken10 || xHigherPriorityTaskWoken100) {
+        portYIELD_FROM_ISR();
+    }
+}
+void setupTimer1_1ms() {
+  noInterrupts();
+  TCCR1A = 0;
+  TCCR1B = 0;
+
+  OCR1A = 249; // 16MHz / 64분주 / 250 = 1ms
+  TCCR1B |= (1 << WGM12); // CTC 모드
+  TCCR1B |= (1 << CS11) | (1 << CS10); // 64분주
+  TIMSK1 |= (1 << OCIE1A); // 비교일치 인터럽트 허용
+  interrupts();
 }
 void handleManualControl(char cmd) {
 
@@ -415,6 +454,25 @@ void SensorTask(void *pvParameters) { //초음파
     }
 }
 
+// ======= LED Task (10ms마다 토글) =======
+void LedTask10ms(void *pvParameters) {
+  pinMode(LED_PIN_10MS, OUTPUT);
+  for (;;) {
+    if (xSemaphoreTake(sem10ms, portMAX_DELAY) == pdTRUE) {
+      digitalWrite(LED_PIN_10MS, !digitalRead(LED_PIN_10MS));
+    }
+  }
+}
+
+void OscTask100ms(void *pvParameters) {
+  pinMode(OSC_PIN_100MS, OUTPUT);
+  for (;;) {
+    if (xSemaphoreTake(sem100ms, portMAX_DELAY) == pdTRUE) {
+      digitalWrite(OSC_PIN_100MS, !digitalRead(OSC_PIN_100MS));
+//      Serial.println("100ms tick"); // Task가 동작하는지 확인
+    }
+  }
+}
 
 void CAMERATask(void *pvParameters) { 
     int cameraSpeed;
@@ -444,7 +502,7 @@ void ControlTask(void *pvParameters) {
 
     // PID 연산, 모터 제어
            currentPotValue = analogRead(STEERING_ANALOG_PIN);
-
+if (xSemaphoreTake(sem10ms, portMAX_DELAY) == pdTRUE) {
  if (xQueueReceive(controlQueue, &cmd,  10 / portTICK_PERIOD_MS) == pdTRUE) {
     if (cmd.angle >25 || cmd.angle <-25) {
   cmd.angle = 0;
@@ -486,9 +544,8 @@ void ControlTask(void *pvParameters) {
 
     
 
-         vTaskDelay(10 / portTICK_PERIOD_MS); // 100Hz 주기
 
-
+}
   }
 }
 void GPSTask(void *pvParameters) {
@@ -530,12 +587,13 @@ void CommTask(void *pvParameters) {
     bool gpsModeActive = false;
     bool UltrasonicActive = false;
     bool CameraModeActive = false;
-    
     static char gpsBuffer[8];  // angle 입력 버퍼
     static uint8_t gpsIndex = 0;
   for (;;) {
     // UART 수신 처리
-    if (xQueueReceive(uartQueue, &rxData, portMAX_DELAY) == pdTRUE) {
+    if (xQueueReceive(uartQueue, &rxData,  portMAX_DELAY) == pdTRUE) {
+          sendByte(rxData);
+          Serial.println(rxData);
       switch (rxData) {
         case 'K': // Manual mode
           currentMode = MODE_MANUAL;
@@ -596,12 +654,10 @@ void CommTask(void *pvParameters) {
   }          break;
       }
       
+         vTaskDelay(100 / portTICK_PERIOD_MS); // 100Hz 주기
 
   }
-//  else {
-//          steeringAngle = 0;
-//      speed1 = 0;
-//  }
+
 }
 }
 // --- Setup
@@ -630,6 +686,15 @@ void setup() {
   pinMode(ECHO_REAR, INPUT);
 
   
+  // 세마포어 생성
+  sem10ms = xSemaphoreCreateBinary();
+  sem100ms = xSemaphoreCreateBinary();
+
+  
+  // 1ms 타이머 시작
+  setupTimer1_1ms();
+
+  
   initEncoders();
   clearEncoderCount();
 
@@ -645,14 +710,16 @@ cameraQueue = xQueueCreate(10, sizeof(int));
     Serial.println("Queue creation failed!");
     while (1);
   }
+  
+  // Task 생성
+  xTaskCreate(LedTask10ms, "LED10", 128, NULL, 3, NULL);
+  xTaskCreate(OscTask100ms, "OSC100", 128, NULL, 2, NULL);
+  xTaskCreate(CommTask, "COMM", 128, NULL, 1, NULL);
   xTaskCreate(SensorTask, "Sensor", 128, NULL, 1, NULL);
-  xTaskCreate(ControlTask, "Control", 256, NULL, 1, NULL);
-  xTaskCreate(CommTask, "Comm", 128, NULL, 1, NULL);
+  xTaskCreate(ControlTask, "Control", 256, NULL, 2, NULL);
     xTaskCreate(ManualTask, "ManualTask", 128, NULL, 1, NULL);
   xTaskCreate(GPSTask, "GPS", 128, NULL, 1, NULL);  // GPS Task 추가
-
   xTaskCreate(CAMERATask, "Camera", 128, NULL, 1, NULL);  // GPS Task 추가
-
   vTaskStartScheduler();
 
 }
