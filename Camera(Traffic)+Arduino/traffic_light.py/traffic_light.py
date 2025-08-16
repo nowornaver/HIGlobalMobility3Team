@@ -18,7 +18,24 @@ time.sleep(0.3)
 coco_model = YOLO('yolov8m.pt')
 my_model   = YOLO(r"C:\\Users\\원수민\\HIGlobalMobility3Team\\Camera(Traffic)+Arduino\\weights\\best.pt")
 COCO_ID, MY_ID = 9, 0
+def create_byte_command(angle, speed):
+    """
+    angle: -26 ~ 26
+    speed: 0 (정지) or 1 (전진)
+    """
+    # 6비트로 매핑: -26 ~ 26 → 0~52
+    angle6bit = angle + 26
+    if angle6bit < 0: angle6bit = 0
+    if angle6bit > 63: angle6bit = 63
 
+    # 1바이트 생성
+    byte_val = (speed << 6) | angle6bit
+
+    # 패리티 비트 생성 (홀수 패리티)
+    parity = bin(byte_val).count('1') % 2
+    byte_val |= (parity << 7)
+
+    return byte_val
 # 신호등 색상 판별 함수
 def get_traffic_light_color(roi):
     if roi.size == 0:
@@ -122,11 +139,14 @@ with dai.Device(pipeline) as device:
                     # 신호 전송 조건 (문자열 사용)
                     if status in ['traffic_red','traffic_yellow'] and conf >= 0.6:
 
-                        signal_to_send = b'0'
-                        ser.write(b'0')  
+                        byte_to_send = create_byte_command(0,0)
+                        ser.write(bytes([byte_to_send]))  # 1바이트 전송
+
                     
                     else :
-                        ser.write(b'1')  
+                        byte_to_send = create_byte_command(0,1)
+                        ser.write(bytes([byte_to_send]))  # 1바이트 전송
+  
 
                         
 
