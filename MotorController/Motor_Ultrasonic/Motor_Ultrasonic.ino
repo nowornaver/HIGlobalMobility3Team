@@ -173,6 +173,7 @@ ISR(USART1_RX_vect) {
     uint8_t data = UDR1;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xQueueSendFromISR(uartQueue, &data, &xHigherPriorityTaskWoken);
+    Serial.println("uart");
     if (xHigherPriorityTaskWoken) {
         portYIELD_FROM_ISR(); // Mega에서는 인자 없음
     }
@@ -390,7 +391,7 @@ GPSCommand GPS_unpack(uint8_t data) {
         calcParity ^= (dataNoParity >> i) & 0x01;
 
     cmd.parityOk = (parityBit == calcParity);
-    cmd.speed = (dataNoParity >> 6) & 0x01;               // 7번째 비트
+    cmd.speed1 = (dataNoParity >> 6) & 0x01;               // 7번째 비트
     cmd.angle = (int8_t)((dataNoParity & 0x3F) - 26);    // 1~6비트 -> -26~26
 
     return cmd;
@@ -444,8 +445,8 @@ void SensorTask(void *pvParameters) { //초음파
     ManualCommand manualCmd = {0,0};     // controlQueue에 넣는 데이터
     static TickType_t nextAdjustTick = 0;
     for (;;) {
-      Serial.println(latestUltrasonicDistance);
-      Serial.println(manualCmd.angle);
+//      Serial.println(latestUltrasonicDistance);
+//      Serial.println(manualCmd.angle);
       if (currentMode == MODE_Ultrasonic){
         latestUltrasonicDistance = readUltrasonic(TRIG_FRONT, ECHO_FRONT); // 센서 읽기
         if (latestUltrasonicDistance < MIN_VALID_CM || latestUltrasonicDistance > MAX_VALID_CM) {
@@ -454,7 +455,7 @@ void SensorTask(void *pvParameters) { //초음파
         TickType_t now = xTaskGetTickCount();
         // 초음파 데이터가 무효면 바로 다음 루프로 (딜레이 포함)
         if (latestUltrasonicDistance < 0) {
-            vTaskDelayUntil(&xLastWakeTime, 50 / portTICK_PERIOD_MS);
+//            vTaskDelayUntil(&xLastWakeTime, 50 / portTICK_PERIOD_MS);
             continue;
         }
 
@@ -485,7 +486,7 @@ if (now >= nextAdjustTick){if (latestUltrasonicDistance < 130) {
 
     }
 
-            vTaskDelayUntil(&xLastWakeTime, 50 / portTICK_PERIOD_MS);
+//            vTaskDelayUntil(&xLastWakeTime, 50 / portTICK_PERIOD_MS);
 
     }
 }
@@ -628,6 +629,12 @@ void CommTask(void *pvParameters) {
   for (;;) {
     // UART 수신 처리
     if (xQueueReceive(uartQueue, &rxData,  portMAX_DELAY) == pdTRUE) {
+      GPSCommand gpsCmd=GPS_unpack(rxData);
+        if (!gpsCmd.parityOk) {
+            Serial.println("[GPS MODE] Parity error!");
+            break;
+        } 
+        Serial.println(rxData);
       switch (rxData) {
         case 'K': // Manual mode
           currentMode = MODE_MANUAL;
@@ -671,7 +678,7 @@ void CommTask(void *pvParameters) {
           Serial.print("[GPS MODE] angle: ");
           Serial.print(gpsCmd.angle);
           Serial.print(", speed: ");
-          Serial.println(gpsCmd.speed);
+          Serial.println(gpsCmd.speed1);
             xQueueSend(gpsQueue, &gpsCmd, 20);
 }
           break;
@@ -750,11 +757,11 @@ txQueue = xQueueCreate(32, sizeof(char)); // 최대 32바이트 전송 버퍼
   }
   
   // Task 생성
-  xTaskCreate(LedTask10ms, "LED10", 128, NULL, 3, NULL);
-  xTaskCreate(OscTask100ms, "OSC100", 128, NULL, 2, NULL);
+  xTaskCreate(LedTask10ms, "LED10", 128, NULL, 1, NULL);
+  xTaskCreate(OscTask100ms, "OSC100", 128, NULL, 1, NULL);
   xTaskCreate(CommTask, "COMM", 128, NULL, 1, NULL);
   xTaskCreate(SensorTask, "Sensor", 128, NULL, 1, NULL);
-  xTaskCreate(ControlTask, "Control", 256, NULL, 2, NULL);
+  xTaskCreate(ControlTask, "Control", 256, NULL, 1, NULL);
     xTaskCreate(ManualTask, "ManualTask", 128, NULL, 1, NULL);
   xTaskCreate(GPSTask, "GPS", 128, NULL, 1, NULL);  // GPS Task 추가
   xTaskCreate(CAMERATask, "Camera", 128, NULL, 1, NULL);  // GPS Task 추가
