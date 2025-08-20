@@ -1,5 +1,4 @@
 #include <Arduino_FreeRTOS.h>
-#include <semphr.h>
 
 #include <MsTimer2.h>
 #include <queue.h>   // QueueHandle_t, xQueueCreate 등
@@ -8,9 +7,6 @@
 #define SPEED_MOTOR_FRONT_PWM  5
 #define SPEED_MOTOR_FRONT_DIR  6
 #define SPEED_MOTOR_FRONT_BRK  7
-
-#define LED_PIN_10MS 13   // 내장 LED
-#define OSC_PIN_100MS 8   // 오실로스코프 측정용 핀
 
 // 엔코더 핀 설정
 #define ENCODER_A_PIN 2
@@ -26,7 +22,6 @@
 #define TRIG_FRONT 11
 #define ECHO_FRONT 12
 #include <stdint.h>
-#define LED_PIN 13  // 내장 LED
 
 
 #define TRIG_REAR 31
@@ -38,29 +33,26 @@ QueueHandle_t gpsQueue;
 QueueHandle_t ultrasonicQueue;
 QueueHandle_t cameraQueue;
 QueueHandle_t controlQueue;
-QueueHandle_t txQueue; // TX용 큐
-
 enum ControlMode {
   MODE_MANUAL,
   MODE_GPS,
   MODE_Ultrasonic,
   MODE_Camera
 };
-
 typedef struct {
     int speed1;       // -1: 뒤로, 0: 정지, 1: 앞으로
     int angle;    // 조향각 (-26 ~ 26)
 } ManualCommand;
-
 typedef struct {
-    int8_t angle;   // -26 ~ 26
-    uint8_t speed1;  // 0 또는 1
-    bool parityOk;  // 패리티 체크 결과
+  int angle;
+  int speed1;
 } GPSCommand;
 
 typedef struct {
   int speed1;
 } CameraCommand;
+
+
 
 typedef struct {
   int speed1;
@@ -74,14 +66,10 @@ ControlMode currentMode = MODE_MANUAL;
 
 
 
-volatile uint32_t tick1ms = 0;
 
-// ======= 주기용 세마포어 =======
-SemaphoreHandle_t sem10ms;
-SemaphoreHandle_t sem100ms;
 // ---------------- Control params (현장 튜닝) ----------------
-const float MAX_ANGLE   = 20.0f;   // 최대 조향각 [deg]
-const float D_CURB      = 10.0f;  // 오른쪽(연석) 목표거리 [cm]
+const float MAX_ANGLE   = 20.0f;   // 최댓 조향각 [deg]
+const float D_CURB      = 100.0f;  // 오른쪽(연석) 목표거리 [cm]
 const float D_OBS       = 120.0f;  // 전방(장애물) 목표거리 [cm]
 
 const float OBS_ENTER   = 160.0f;  // 전방 가까우면 장애물 가중치↑
@@ -173,7 +161,6 @@ ISR(USART1_RX_vect) {
     uint8_t data = UDR1;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xQueueSendFromISR(uartQueue, &data, &xHigherPriorityTaskWoken);
-    Serial.println("uart");
     if (xHigherPriorityTaskWoken) {
         portYIELD_FROM_ISR(); // Mega에서는 인자 없음
     }
@@ -181,43 +168,12 @@ ISR(USART1_RX_vect) {
 
 // UART1 TX 데이터 레지스터 빈 상태 인터럽트
 ISR(USART1_UDRE_vect) {
-    char data;
-    if (xQueueReceiveFromISR(txQueue, &data, NULL) == pdTRUE) {
-        UDR1 = data; // 큐에서 꺼낸 데이터 전송
-    } else {
-        // 큐 비어있으면 인터럽트 종료
-        UCSR1B &= ~(1 << UDRIE1);
-    }
-}
-ISR(TIMER1_COMPA_vect) {
-  tick1ms++;
+  if (!txReady) {
+    UDR1 = txData;    // 데이터 전송
+    txReady = true;   // 전송 완료
+    UCSR1B &= ~(1 << UDRIE1); // 인터럽트 비활성화
 
-    BaseType_t xHigherPriorityTaskWoken10 = pdFALSE;
-    BaseType_t xHigherPriorityTaskWoken100 = pdFALSE;
-
-    if (tick1ms % 10 == 0) {
-        xSemaphoreGiveFromISR(sem10ms, &xHigherPriorityTaskWoken10);
-    }
-
-    if (tick1ms % 100 == 0) {
-        xSemaphoreGiveFromISR(sem100ms, &xHigherPriorityTaskWoken100);
-    }
-
-    // 한 번만 호출
-    if (xHigherPriorityTaskWoken10 || xHigherPriorityTaskWoken100) {
-        portYIELD_FROM_ISR();
-    }
-}
-void setupTimer1_1ms() {
-  noInterrupts();
-  TCCR1A = 0;
-  TCCR1B = 0;
-
-  OCR1A = 249; // 16MHz / 64분주 / 250 = 1ms
-  TCCR1B |= (1 << WGM12); // CTC 모드
-  TCCR1B |= (1 << CS11) | (1 << CS10); // 64분주
-  TIMSK1 |= (1 << OCIE1A); // 비교일치 인터럽트 허용
-  interrupts();
+  }
 }
 void handleManualControl(char cmd) {
 
@@ -252,11 +208,11 @@ void handleManualControl(char cmd) {
 }
 // 한 바이트 송신
 void sendByte(char data) {
-    if (xQueueSend(txQueue, &data, 0) != pdPASS) {
-        Serial.println("TX Queue Full!"); // 큐가 꽉 찼으면 처리
-    }
-    // TX 인터럽트 활성화
-    UCSR1B |= (1 << UDRIE1);
+  while (!txReady);   // 이전 전송 완료 대기
+  txData = data;
+  txReady = false;
+  UCSR1B |= (1 << UDRIE1); // TX 인터럽트 활성화
+//  Serial.println(txData);
 }
 
 void UART1_init(unsigned long baud) {
@@ -379,23 +335,6 @@ void handleCameraData(char data) {
     
   }
 }
-GPSCommand GPS_unpack(uint8_t data) {
-    GPSCommand cmd;
-    
-    uint8_t dataNoParity = data & 0x7F;   // 상위 7비트
-    uint8_t parityBit = (data >> 7) & 0x01;
-
-    // 홀수 패리티 계산
-    uint8_t calcParity = 0;
-    for (int i = 0; i < 7; i++)
-        calcParity ^= (dataNoParity >> i) & 0x01;
-
-    cmd.parityOk = (parityBit == calcParity);
-    cmd.speed1 = (dataNoParity >> 6) & 0x01;               // 7번째 비트
-    cmd.angle = (int8_t)((dataNoParity & 0x3F) - 26);    // 1~6비트 -> -26~26
-
-    return cmd;
-}
 float readUltrasonic(int trigPin, int echoPin) {
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(30);
@@ -442,74 +381,40 @@ void ManualTask(void *pvParameters) {
 void SensorTask(void *pvParameters) { //초음파
   
     UltrasonicCommand ultraCommand = {0,0};
-    ManualCommand manualCmd = {0,0};     // controlQueue에 넣는 데이터
-    static TickType_t nextAdjustTick = 0;
+    ManualCommand manualCmd;     // controlQueue에 넣는 데이터
+
     for (;;) {
-//      Serial.println(latestUltrasonicDistance);
-//      Serial.println(manualCmd.angle);
       if (currentMode == MODE_Ultrasonic){
         latestUltrasonicDistance = readUltrasonic(TRIG_FRONT, ECHO_FRONT); // 센서 읽기
         if (latestUltrasonicDistance < MIN_VALID_CM || latestUltrasonicDistance > MAX_VALID_CM) {
             latestUltrasonicDistance = -1;
         }
-        TickType_t now = xTaskGetTickCount();
+
         // 초음파 데이터가 무효면 바로 다음 루프로 (딜레이 포함)
         if (latestUltrasonicDistance < 0) {
-//            vTaskDelayUntil(&xLastWakeTime, 50 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(50));
             continue;
         }
 
-if (now >= nextAdjustTick){if (latestUltrasonicDistance < 130) {
-            manualCmd.speed1 = 0;
-            manualCmd.angle = manualCmd.angle-5;
-            // xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
-        }
-        else if (latestUltrasonicDistance > 150) {
-          manualCmd.angle = manualCmd.angle+5;
-        }
 
-        else {
+        // 장애물 가까우면 속도 0 명령 전송
+        if (latestUltrasonicDistance < 100) {
             manualCmd.speed1 = 0;
             manualCmd.angle = 0;
-
+            xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
+        }
+        else {
+            manualCmd.speed1 = 1;
+            manualCmd.angle = 0;
         }
 
-      if (manualCmd.angle >  (int)MAX_ANGLE) manualCmd.angle =  (int)MAX_ANGLE;
-      if (manualCmd.angle < -(int)MAX_ANGLE) manualCmd.angle = -(int)MAX_ANGLE;
-      nextAdjustTick = now + pdMS_TO_TICKS(1000);
-      }
-        // 장애물 가까우면 속도 0 명령 전송
-        
-
-                    xQueueSend(controlQueue, &manualCmd, 10 / portTICK_PERIOD_MS);
-
-
     }
 
-//            vTaskDelayUntil(&xLastWakeTime, 50 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(50)); // 20Hz 주기
 
     }
 }
 
-// ======= LED Task (10ms마다 토글) =======
-void LedTask10ms(void *pvParameters) {
-  pinMode(LED_PIN_10MS, OUTPUT);
-  for (;;) {
-    if (xSemaphoreTake(sem10ms, portMAX_DELAY) == pdTRUE) {
-      digitalWrite(LED_PIN_10MS, !digitalRead(LED_PIN_10MS));
-    }
-  }
-}
-
-void OscTask100ms(void *pvParameters) {
-  pinMode(OSC_PIN_100MS, OUTPUT);
-  for (;;) {
-    if (xSemaphoreTake(sem100ms, portMAX_DELAY) == pdTRUE) {
-      digitalWrite(OSC_PIN_100MS, !digitalRead(OSC_PIN_100MS));
-//      Serial.println("100ms tick"); // Task가 동작하는지 확인
-    }
-  }
-}
 
 void CAMERATask(void *pvParameters) { 
     int cameraSpeed;
@@ -539,7 +444,7 @@ void ControlTask(void *pvParameters) {
 
     // PID 연산, 모터 제어
            currentPotValue = analogRead(STEERING_ANALOG_PIN);
-if (xSemaphoreTake(sem10ms, portMAX_DELAY) == pdTRUE) {
+
  if (xQueueReceive(controlQueue, &cmd,  10 / portTICK_PERIOD_MS) == pdTRUE) {
     if (cmd.angle >25 || cmd.angle <-25) {
   cmd.angle = 0;
@@ -581,8 +486,9 @@ if (xSemaphoreTake(sem10ms, portMAX_DELAY) == pdTRUE) {
 
     
 
+         vTaskDelay(10 / portTICK_PERIOD_MS); // 100Hz 주기
 
-}
+
   }
 }
 void GPSTask(void *pvParameters) {
@@ -620,21 +526,16 @@ void GPSTask(void *pvParameters) {
 
 void CommTask(void *pvParameters) {
     Serial.println("CommTask running");
-    int8_t rxData;
+    uint8_t rxData;
     bool gpsModeActive = false;
     bool UltrasonicActive = false;
     bool CameraModeActive = false;
+    
     static char gpsBuffer[8];  // angle 입력 버퍼
     static uint8_t gpsIndex = 0;
   for (;;) {
     // UART 수신 처리
-    if (xQueueReceive(uartQueue, &rxData,  portMAX_DELAY) == pdTRUE) {
-      GPSCommand gpsCmd=GPS_unpack(rxData);
-        if (!gpsCmd.parityOk) {
-            Serial.println("[GPS MODE] Parity error!");
-            break;
-        } 
-        Serial.println(rxData);
+    if (xQueueReceive(uartQueue, &rxData, portMAX_DELAY) == pdTRUE) {
       switch (rxData) {
         case 'K': // Manual mode
           currentMode = MODE_MANUAL;
@@ -670,15 +571,10 @@ void CommTask(void *pvParameters) {
           break;
         case MODE_GPS:
         if (gpsModeActive) {
-        GPSCommand gpsCmd=GPS_unpack(rxData);
-        if (!gpsCmd.parityOk) {
-            Serial.println("[GPS MODE] Parity error!");
-            break;
-        }
-          Serial.print("[GPS MODE] angle: ");
-          Serial.print(gpsCmd.angle);
-          Serial.print(", speed: ");
-          Serial.println(gpsCmd.speed1);
+        GPSCommand gpsCmd;
+            gpsCmd.angle = (int8_t)rxData;  // 부호 있는 1바이트 정수로 변환
+            Serial.print("[GPS MODE] Received angle: ");
+            Serial.println(gpsCmd.angle);
             xQueueSend(gpsQueue, &gpsCmd, 20);
 }
           break;
@@ -700,8 +596,12 @@ void CommTask(void *pvParameters) {
   }          break;
       }
       
-  }
 
+  }
+//  else {
+//          steeringAngle = 0;
+//      speed1 = 0;
+//  }
 }
 }
 // --- Setup
@@ -730,41 +630,29 @@ void setup() {
   pinMode(ECHO_REAR, INPUT);
 
   
-  // 세마포어 생성
-  sem10ms = xSemaphoreCreateBinary();
-  sem100ms = xSemaphoreCreateBinary();
-
-  
-  // 1ms 타이머 시작
-  setupTimer1_1ms();
-
-  
   initEncoders();
   clearEncoderCount();
 
   previous_pos = readEncoder();  // ✅ 초기값 설정
- uartQueue = xQueueCreate(32, sizeof(int8_t));
-manualQueue = xQueueCreate(10, sizeof(int8_t));  // rxData(char) 넣으니 이렇게
+ uartQueue = xQueueCreate(32, sizeof(uint8_t));
+manualQueue = xQueueCreate(10, sizeof(char));  // rxData(char) 넣으니 이렇게
 controlQueue = xQueueCreate(10, sizeof(ManualCommand));
 gpsQueue = xQueueCreate(10, sizeof(GPSCommand));
-ultrasonicQueue = xQueueCreate(10, sizeof(int8_t));
+ultrasonicQueue = xQueueCreate(10, sizeof(uint8_t));
 cameraQueue = xQueueCreate(10, sizeof(int));
-txQueue = xQueueCreate(32, sizeof(char)); // 최대 32바이트 전송 버퍼
 
   if (!uartQueue || !manualQueue || !gpsQueue || !ultrasonicQueue || !cameraQueue) {
     Serial.println("Queue creation failed!");
     while (1);
   }
-  
-  // Task 생성
-  xTaskCreate(LedTask10ms, "LED10", 128, NULL, 1, NULL);
-  xTaskCreate(OscTask100ms, "OSC100", 128, NULL, 1, NULL);
-  xTaskCreate(CommTask, "COMM", 128, NULL, 1, NULL);
   xTaskCreate(SensorTask, "Sensor", 128, NULL, 1, NULL);
   xTaskCreate(ControlTask, "Control", 256, NULL, 1, NULL);
+  xTaskCreate(CommTask, "Comm", 128, NULL, 1, NULL);
     xTaskCreate(ManualTask, "ManualTask", 128, NULL, 1, NULL);
   xTaskCreate(GPSTask, "GPS", 128, NULL, 1, NULL);  // GPS Task 추가
+
   xTaskCreate(CAMERATask, "Camera", 128, NULL, 1, NULL);  // GPS Task 추가
+
   vTaskStartScheduler();
 
 }
