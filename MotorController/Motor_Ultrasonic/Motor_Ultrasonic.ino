@@ -40,8 +40,8 @@ enum ControlMode {
   MODE_Camera
 };
 typedef struct {
-    int speed1;       // -1: 뒤로, 0: 정지, 1: 앞으로
-    int angle;    // 조향각 (-26 ~ 26)
+    int angle;       // -1: 뒤로, 0: 정지, 1: 앞으로
+    int speed1;    // 조향각 (-26 ~ 26)
 } ManualCommand;
 typedef struct {
   int angle;
@@ -63,9 +63,20 @@ ControlMode currentMode = MODE_MANUAL;
 
 
 
+GPSCommand GPS_unpack(uint8_t data) {
+    GPSCommand cmd;
 
+    // 속도 2비트 추출
+    uint8_t speed_bits = (data >> 6) & 0x03;
+    if (speed_bits == 0b01) cmd.speed1 = 1;    // 전진
+    else if (speed_bits == 0b10) cmd.speed1 = -1; // 후진
+    else cmd.speed1 = 0;                        // 정지
 
+    // 조향 6비트 추출
+    cmd.angle = (int8_t)((data & 0x3F) - 26);
 
+    return cmd;
+}
 
 // ---------------- Control params (현장 튜닝) ----------------
 const float MAX_ANGLE   = 20.0f;   // 최댓 조향각 [deg]
@@ -371,11 +382,11 @@ void updateObsWeight(float fc){
 }
 
 void ManualTask(void *pvParameters) {
-  char rxData;
+  int8_t rxData;
   for (;;) {
-    if (xQueueReceive(manualQueue, &rxData, portMAX_DELAY) == pdTRUE) {
-      handleManualControl(rxData);
-    }
+//    if (xQueueReceive(manualQueue, &rxData, portMAX_DELAY) == pdTRUE) {
+//      handleManualControl(rxData);
+//    }
   }
 }
 void SensorTask(void *pvParameters) { //초음파
@@ -446,7 +457,7 @@ void ControlTask(void *pvParameters) {
            currentPotValue = analogRead(STEERING_ANALOG_PIN);
 
  if (xQueueReceive(controlQueue, &cmd,  10 / portTICK_PERIOD_MS) == pdTRUE) {
-    if (cmd.angle >25 || cmd.angle <-25) {
+    if (cmd.angle >26 || cmd.angle <-26) {
   cmd.angle = 0;
 }
     speed_angle_queue[0][0] = cmd.speed1;
@@ -458,7 +469,7 @@ void ControlTask(void *pvParameters) {
   desiredSpeed_kph = speed_angle_queue[0][0];
   targetAngle = speed_angle_queue[0][1];
 //   Serial.println(cmd.speed1);
-//Serial.println(cmd.speed1);
+//Serial.println(cmd.angle);
 
   if (desiredSpeed_kph == 0.0) {
     setMotor(0, 0);  // 정지
@@ -530,21 +541,32 @@ void CommTask(void *pvParameters) {
     bool gpsModeActive = false;
     bool UltrasonicActive = false;
     bool CameraModeActive = false;
-    
+    bool ControllerActive = false;
     static char gpsBuffer[8];  // angle 입력 버퍼
     static uint8_t gpsIndex = 0;
   for (;;) {
     // UART 수신 처리
     if (xQueueReceive(uartQueue, &rxData, portMAX_DELAY) == pdTRUE) {
+//              GPSCommand gpsCmd=GPS_unpack(rxData);
+//          Serial.print("[GPS MODE] angle: ");
+//          Serial.print(gpsCmd.angle);
+//          Serial.print(", speed: ");
+//          Serial.println(gpsCmd.speed1);
+if (rxData>='A' && rxData<'Z') {
       switch (rxData) {
         case 'K': // Manual mode
           currentMode = MODE_MANUAL;
+          ControllerActive=true;
+          gpsModeActive=false;
+          UltrasonicActive=false;
+          CameraModeActive=false;
           Serial.println("Mode: MANUAL");
           continue;
         case 'G': // GPS mode
           currentMode = MODE_GPS;
           gpsModeActive = true;
           UltrasonicActive=false;
+          ControllerActive=false;
           CameraModeActive=false;
           Serial.println("Mode: GPS");
           continue;
@@ -552,6 +574,7 @@ void CommTask(void *pvParameters) {
           currentMode = MODE_Ultrasonic;
           gpsModeActive =false;
           UltrasonicActive=true;
+          ControllerActive=false;
           CameraModeActive=false;
           Serial.println("Mode: ULTRASONIC");
           continue;
@@ -560,15 +583,21 @@ void CommTask(void *pvParameters) {
           gpsModeActive =false;
           UltrasonicActive=false;
           CameraModeActive=true;
+          ControllerActive=false;
           Serial.println("Mode: CAMERA");
           continue;
       }
+}
 
       // 모드별 처리
       switch (currentMode) {
-        case MODE_MANUAL:
-          xQueueSend(manualQueue, &rxData, 20);
+        case MODE_MANUAL: {
+        GPSCommand gpsCmd=GPS_unpack(rxData);
+//        Serial.println(gpsCmd.speed1);
+        Serial.println(gpsCmd.angle);
+          xQueueSend(controlQueue, &gpsCmd, 20);
           break;
+        }
         case MODE_GPS:
         if (gpsModeActive) {
         GPSCommand gpsCmd;
@@ -636,8 +665,8 @@ void setup() {
   previous_pos = readEncoder();  // ✅ 초기값 설정
  uartQueue = xQueueCreate(32, sizeof(uint8_t));
 manualQueue = xQueueCreate(10, sizeof(char));  // rxData(char) 넣으니 이렇게
-controlQueue = xQueueCreate(10, sizeof(ManualCommand));
-gpsQueue = xQueueCreate(10, sizeof(GPSCommand));
+controlQueue = xQueueCreate(32, sizeof(ManualCommand));
+gpsQueue = xQueueCreate(32, sizeof(GPSCommand));
 ultrasonicQueue = xQueueCreate(10, sizeof(uint8_t));
 cameraQueue = xQueueCreate(10, sizeof(int));
 
