@@ -10,6 +10,13 @@ SERIAL_PORT, SERIAL_BAUD = 'COM7', 9600
 ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
 time.sleep(2)
 print("Sending 'C' mode, then sending numbers repeatedly")
+ser_write_prev=[0.0]
+_raw=ser.write
+ser.write=lambda d:(lambda now:(_raw(d i11f isinstance(d,(bytes,bytearray)) else bytes([d]) if isinstance(d,int) else bytes(d)) if now-ser_write_prev[0]>=0.1 else 0, ser_write_prev.__setitem__(0,now) if now-ser_write_prev[0]>=0.1 else None)[0])(time.monotonic())
+#
+_last=[0.0]
+_prev=ser.write
+ser.write=lambda d:(lambda now: (print(f"Δt={now-_last[0]:.3f}s") if _last[0] else None, _last.__setitem__(0,now), _prev(d))[-1])(time.monotonic())
 
 # 먼저 모드 문자 한 번 보내기
 ser.write(b'C')
@@ -34,8 +41,10 @@ def create_byte_command(angle, speed):
     # 패리티 비트 생성 (홀수 패리티)
     parity = bin(byte_val).count('1') % 2
     byte_val |= (parity << 7)
+    print(byte_val)
 
     return byte_val
+
 # 신호등 색상 판별 함수
 def get_traffic_light_color(roi):
     if roi.size == 0:
@@ -136,8 +145,8 @@ with dai.Device(pipeline) as device:
                     label = f"{prefix}{status} {conf:.2f} ({dist:.2f}m)"
                     boxes.append((x1, y1, x2, y2, color, label))
 
-                    # 신호 전송 조건 (문자열 사용)
-                    if status in ['traffic_red','traffic_yellow'] and conf >= 0.6:
+                    # # 신호 전송 조건 (문자열 사용)
+                    if status in ['traffic_red','traffic_yellow'] and conf >= 0.5:
 
                         byte_to_send = create_byte_command(0,0)
                         ser.write(bytes([byte_to_send]))  # 1바이트 전송

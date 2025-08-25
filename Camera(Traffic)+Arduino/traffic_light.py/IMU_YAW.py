@@ -1,5 +1,7 @@
+##아두이노로 보내는 yaw값 보내는 코드 추가 바람.
 import depthai as dai
 import time, math
+import serial
 
 # 1) 파이프라인 구성
 pipeline = dai.Pipeline()
@@ -61,6 +63,7 @@ with dai.Device(pipeline) as device:
                 dy_1s += delta_yaw_deg
                 # print(f"yaw: {yaw_rel:8.2f} °")
                 print(f"yaw_rate: {yaw_rate_dps:7.2f} °/s | yaw: {yaw_rel:8.2f} °")
+                
                 if (now - t_1s) >= 1.0:
                     avg_rate_1s = dy_1s / (now - t_1s)  # ≈ °/s
                     print(f"Δyaw@1s: {dy_1s:6.2f} ° | avg_rate@1s: {avg_rate_1s:6.2f} °/s")
