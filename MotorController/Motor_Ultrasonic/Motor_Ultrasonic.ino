@@ -63,7 +63,20 @@ ControlMode currentMode = MODE_MANUAL;
 
 
 
+GPSCommand GPS_unpack(uint8_t data) {
+    GPSCommand cmd;
 
+    // 속도 2비트 추출
+    uint8_t speed_bits = (data >> 6) & 0x03;
+    if (speed_bits == 0b01) cmd.speed1 = 1;    // 전진
+    else if (speed_bits == 0b10) cmd.speed1 = -1; // 후진
+    else cmd.speed1 = 0;                        // 정지
+
+    // 조향 6비트 추출
+    cmd.angle = (int8_t)((data & 0x3F) - 26);
+
+    return cmd;
+}
 
 // ---------------- Control params (현장 튜닝) ----------------
 const float MAX_ANGLE   = 20.0f;   // 최댓 조향각 [deg]
@@ -529,8 +542,8 @@ void CommTask(void *pvParameters) {
     bool UltrasonicActive = false;
     bool CameraModeActive = false;
     bool ControllerActive = false;
-    static int8_t tempBuffer[2];
-    static uint8_t byteIndex = 0;
+    static char gpsBuffer[8];  // angle 입력 버퍼
+    static uint8_t gpsIndex = 0;
   for (;;) {
     // UART 수신 처리
     if (xQueueReceive(uartQueue, &rxData, portMAX_DELAY) == pdTRUE) {
@@ -579,19 +592,10 @@ if (rxData>='A' && rxData<'Z') {
       // 모드별 처리
       switch (currentMode) {
         case MODE_MANUAL: {
-              tempBuffer[byteIndex++] = (int8_t)rxData;
-
-                if (byteIndex >= 2) {  // speed + angle 다 받으면
-                    GPSCommand gpsCmd;
-                    gpsCmd.speed1 = tempBuffer[0];
-                    gpsCmd.angle = tempBuffer[1];
-                    xQueueSend(controlQueue, &gpsCmd, 20);
-                    byteIndex = 0;  // 초기화
-                    Serial.print("Speed: ");
-                    Serial.print(gpsCmd.speed1);
-                    Serial.print(", Angle: ");
-                    Serial.println(gpsCmd.angle);
-                }
+        GPSCommand gpsCmd=GPS_unpack(rxData);
+//        Serial.println(gpsCmd.speed1);
+        Serial.println(gpsCmd.angle);
+          xQueueSend(controlQueue, &gpsCmd, 20);
           break;
         }
         case MODE_GPS:
