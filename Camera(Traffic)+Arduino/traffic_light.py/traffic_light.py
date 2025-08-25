@@ -12,7 +12,7 @@ time.sleep(2)
 print("Sending 'C' mode, then sending numbers repeatedly")
 ser_write_prev=[0.0]
 _raw=ser.write
-ser.write=lambda d:(lambda now:(_raw(d i11f isinstance(d,(bytes,bytearray)) else bytes([d]) if isinstance(d,int) else bytes(d)) if now-ser_write_prev[0]>=0.1 else 0, ser_write_prev.__setitem__(0,now) if now-ser_write_prev[0]>=0.1 else None)[0])(time.monotonic())
+ser.write=lambda d:(lambda now:(_raw(d if isinstance(d,(bytes,bytearray)) else bytes([d]) if isinstance(d,int) else bytes(d)) if now-ser_write_prev[0]>=0.1 else 0, ser_write_prev.__setitem__(0,now) if now-ser_write_prev[0]>=0.1 else None)[0])(time.monotonic())
 #
 _last=[0.0]
 _prev=ser.write
