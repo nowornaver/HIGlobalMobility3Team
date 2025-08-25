@@ -3,7 +3,7 @@ import time
 import pygame
 
 # 시리얼 포트 설정
-ser = serial.Serial('COM4', 9600, timeout=1)
+ser = serial.Serial('COM13', 9600, timeout=1)
 
 # 조이스틱 초기화
 pygame.init()
@@ -18,6 +18,7 @@ def apply_deadzone(value, deadzone=0.1):
         return 0.0
     return value
 
+seq = 0  # 순서 번호
 
 while True:
     pygame.event.pump()
@@ -35,17 +36,21 @@ while True:
 
     # throttle: -1, 0, 1
     if x_axis < 0.0:
-        throttle = 1   # 전진
+        throttle = 5   # 전진
     elif x_axis > 0.0:
-        throttle = -1  # 후진
+        throttle = -5  # 후진
     else:
         throttle = 0   # 정지
 
     # ===============================
     # 속도와 조향을 "각각 1바이트"로 전송
     # ===============================
+    # ser.write(bytes([seq & 0xFF]))
+
     ser.write(bytes([throttle & 0xFF]))   # 속도 (signed 8bit)
     ser.write(bytes([steering & 0xFF]))   # 조향 (signed 8bit)
 
-    print(f"Steering: {steering}, Throttle: {throttle}")
-    time.sleep(0.05)
+    # print(f"Steering: {steering}, Throttle: {throttle}")
+    print(f"Seq: {seq}, Throttle: {throttle}, Steering: {steering}")
+    # seq = (seq + 1) % 256  # 0~255 반복
+    time.sleep(0.1)  # 100ms 간격

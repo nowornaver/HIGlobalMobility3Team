@@ -156,7 +156,7 @@ volatile double speed_angle_queue[2][2] = {{0.0, 0.0}, {0.0, 0.0}};
 
 // UART1 RX 인터럽트
 ISR(USART1_RX_vect) {
-    uint8_t data = UDR1;
+    int8_t data = UDR1;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     xQueueSendFromISR(uartQueue, &data, &xHigherPriorityTaskWoken);
     if (xHigherPriorityTaskWoken) {
